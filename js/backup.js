@@ -5,7 +5,7 @@ import { findCat } from './cats.js';
 import { fromKey, toKey } from './dateutil.js';
 
 export const BACKUP_APP = 'orbit';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2; // 2：多了自訂類別（讀得懂版本 1 的舊備份）
 export const MAX_AMOUNT = 99999999;
 export const NOTE_MAX = 40;
 const MAX_FILE_CHARS = 20 * 1024 * 1024; // 超過 20MB 的字串不是正常的備份
@@ -34,13 +34,13 @@ function cleanEntry(e) {
 }
 
 /** 做出備份檔的文字內容（JSON）。示範資料不會在 entries 裡，所以不會被備份。 */
-export function buildBackup(entries, now = new Date()) {
+export function buildBackup(entries, now = new Date(), categories = { expense: [], income: [] }) {
   const list = entries
     .filter((e) => !e.demo)
     .map(cleanEntry)
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
   return JSON.stringify(
-    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, entries: list },
+    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, categories, entries: list },
     null,
     1,
   );
@@ -67,7 +67,7 @@ export function validateEntry(raw, makeId) {
 
 /**
  * 讀取備份檔的文字內容。
- * @returns {{ok:true, entries:object[], skipped:number, exportedAt:string|null} | {ok:false, error:string}}
+ * @returns {{ok:true, entries:object[], skipped:number, categories:object, exportedAt:string|null} | {ok:false, error:string}}
  */
 export function parseBackup(text, makeId) {
   if (typeof text !== 'string' || !text.trim()) return { ok: false, error: '檔案是空的' };
@@ -94,7 +94,9 @@ export function parseBackup(text, makeId) {
     seen.add(e.id);
     entries.push(e);
   }
-  return { ok: true, entries, skipped, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
+  const c = data.categories && typeof data.categories === 'object' ? data.categories : {};
+  const categories = { expense: Array.isArray(c.expense) ? c.expense : [], income: Array.isArray(c.income) ? c.income : [] };
+  return { ok: true, entries, skipped, categories, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
 }
 
 const sameEntry = (a, b) =>

@@ -2,7 +2,7 @@
 // 策略：有網路時一律抓最新檔案（並更新快取），沒網路時用快取。
 // 改了任何檔案後，把 CACHE 的版本號加一，舊快取就會被清掉。
 
-const CACHE = 'orbit-v6';
+const CACHE = 'orbit-v7';
 const FILES = [
   './',
   'index.html',
@@ -21,6 +21,9 @@ const FILES = [
   'js/backup.js',
   'js/files.js',
   'js/list-gestures.js',
+  'js/palette.js',
+  'js/carousel.js',
+  'js/cat-editor.js',
   'js/ring.js',
   'js/gestures.js',
   'icons/icon-192.png',

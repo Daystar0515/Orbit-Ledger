@@ -13,6 +13,11 @@
   --fab-ink: #ffffff;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.06);
   --wrap: min(92vw, 340px, 40dvh);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1); /* 減速很柔的曲線：大部分的動作都用它 */
+  --ease-io: cubic-bezier(0.4, 0, 0.2, 1);
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 24px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -93,7 +98,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   border-radius: 999px;
   font-size: 13px;
   color: var(--muted);
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.3s var(--ease), color 0.3s var(--ease), box-shadow 0.3s var(--ease);
 }
 .type-switch button.on {
   background: var(--surface);
@@ -129,12 +134,12 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 .seg {
   cursor: pointer;
   outline: none;
-  transition: opacity 0.2s;
+  transition: opacity 0.3s var(--ease);
 }
 /* 圓環填滿：遮罩從 12 點鐘順時針掃一圈（時間要和 ring.js 的 SWEEP_MS 一致） */
-.sweep.play { animation: sweep 900ms linear both; }
+.sweep.play { animation: sweep 1000ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 @keyframes sweep { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-.pct-in { animation: pct-in 0.3s ease both; }
+.pct-in { animation: pct-in 0.4s var(--ease) both; }
 @keyframes pct-in { from { opacity: 0; } to { opacity: 1; } }
 .seg.dim { opacity: 0.28; }
 .pct {
@@ -178,9 +183,9 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 }
 .c-sub { min-height: 1.2em; font-size: 12.5px; color: var(--muted); }
 
-.anim-from-left { animation: from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.anim-from-right { animation: from-right 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.anim-fade { animation: fade-in 0.3s ease; }
+.anim-from-left { animation: from-left 0.42s var(--ease); }
+.anim-from-right { animation: from-right 0.42s var(--ease); }
+.anim-fade { animation: fade-in 0.4s var(--ease); }
 .anim-bump { animation: bump 0.3s ease; }
 @keyframes from-left { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
 @keyframes from-right { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
@@ -203,7 +208,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   height: 8px;
   border-radius: 999px;
   background: var(--dot);
-  transition: width 0.25s ease, background 0.25s ease;
+  transition: width 0.4s var(--ease), background 0.3s var(--ease);
 }
 .dot-btn::after { content: ""; position: absolute; inset: -12px -6px; }
 .dot-btn.on { width: 22px; background: var(--ink); }
@@ -236,12 +241,13 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 .row.swipe:focus-visible .row-fg { box-shadow: inset 0 0 0 2px var(--muted); border-radius: 8px; }
 .row-del {
   position: absolute;
-  top: 0;
+  top: 4px;
   right: 0;
-  bottom: 0;
-  width: 84px;
+  bottom: 4px;
+  width: 76px;
   background: #d92d20;
   color: #fff;
+  border-radius: var(--r-md);
   font-size: 15px;
   font-weight: 600;
   visibility: hidden;
@@ -268,7 +274,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   backdrop-filter: blur(16px) saturate(1.4);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
-  transition: transform 0.15s ease;
+  transition: transform 0.3s var(--ease);
 }
 .fab::before, .fab::after {
   content: "";
@@ -296,7 +302,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   white-space: nowrap;
   opacity: 0;
   transform: translate(-50%, 6px);
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.3s var(--ease), transform 0.4s var(--ease);
   pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -328,9 +334,9 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   background: rgba(0, 0, 0, 0.38);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.25s, visibility 0s 0.25s;
+  transition: opacity 0.35s var(--ease), visibility 0s 0.35s;
 }
-.scrim.open { opacity: 1; visibility: visible; transition: opacity 0.25s; }
+.scrim.open { opacity: 1; visibility: visible; transition: opacity 0.35s var(--ease); }
 
 .sheet {
   position: fixed;
@@ -345,18 +351,18 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   max-height: calc(100dvh - var(--safe-top) - 12px);
   margin: 0 auto;
   padding: 0 16px calc(var(--safe-bottom) + 14px);
-  border-radius: 24px 24px 0 0;
+  border-radius: 28px 28px 0 0;
   background: var(--surface);
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
   outline: none;
   transform: translateY(105%);
   visibility: hidden;
-  transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s 0.34s;
+  transition: transform 0.46s var(--ease), visibility 0s 0.46s;
 }
 .sheet.open {
   transform: none;
   visibility: visible;
-  transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.46s var(--ease);
 }
 .sheet-top { flex: none; touch-action: none; margin: 0 -16px; padding: 0 16px; }
 .grab { display: grid; place-items: center; height: 22px; }
@@ -414,7 +420,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 
 /* 具體事項與日期 */
 .item-row { flex: none; padding: 6px 0 8px; }
-.date-ctl { display: flex; align-items: center; background: var(--keycap); }
+.date-ctl { display: flex; align-items: center; border-radius: var(--r-sm); background: var(--keycap); }
 .step { width: 34px; height: 44px; font-size: 22px; line-height: 1; color: var(--muted); }
 .step:disabled { opacity: 0.25; cursor: default; }
 .date-label { position: relative; display: grid; place-items: center; min-width: 74px; height: 44px; padding: 0 4px; font-size: 15px; font-weight: 600; }
@@ -425,7 +431,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   height: 44px;
   padding: 0 14px;
   border: 0;
-  border-radius: 13px;
+  border-radius: var(--r-md);
   background: var(--keycap);
   font-size: 16px; /* 16px 以上，iPhone 點進去才不會自動放大畫面 */
   outline: none;
@@ -440,7 +446,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   display: grid;
   place-items: center;
   height: 48px;
-  border-radius: 13px;
+  border-radius: var(--r-md);
   background: var(--keycap);
   font-family: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
   font-size: 23px;
@@ -455,7 +461,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   width: 92px;
   height: 52px;
   border: 1.5px solid #d92d20;
-  border-radius: 16px;
+  border-radius: 18px;
   color: #d92d20;
   font-size: 16px;
   font-weight: 650;
@@ -465,7 +471,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
   flex: none;
   height: 52px;
   margin-top: 10px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--ink);
   color: var(--bg);
   font-size: 17px;
@@ -524,3 +530,79 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 /* 提示訊息要蓋在視窗上面 */
 .toast { z-index: 40; position: fixed; }
 .toast.high { top: calc(var(--safe-top) + 64px); bottom: auto; }
+
+/* ---- 按下的回饋與列表進場（動畫統一用 --ease，比較柔） ---- */
+.pill-btn, .save, .del-btn, .link-btn, .toast-act { transition: transform 0.25s var(--ease), opacity 0.2s, background 0.2s; }
+.pill-btn:active, .save:active, .del-btn:active, .toast-act:active { transform: scale(0.96); }
+.keypad button { transition: transform 0.2s var(--ease), background 0.2s; }
+.row { animation: row-in 0.45s var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
+@keyframes row-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.switch span { transition: transform 0.35s var(--ease); }
+
+/* ---- 色盲友善模式：支出藍、收入黃 ---- */
+html[data-cb] { --income: #946400; --expense: #1d608e; }
+@media (prefers-color-scheme: dark) {
+  html[data-cb] { --income: #f8b325; --expense: #3ba8ff; }
+}
+
+/* ---- 滑動選擇器 ---- */
+.cat-wrap { flex: none; overflow: hidden; margin: 0 -16px; }
+.carousel {
+  display: flex;
+  gap: 10px;
+  padding: 4px calc(50% - 62px) 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  outline: none;
+}
+.carousel::-webkit-scrollbar { display: none; }
+.car-card {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 124px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  scroll-snap-align: center;
+  font-size: 16px;
+  white-space: nowrap;
+  opacity: 0.45;
+  transform: scale(0.88);
+  transition: transform 0.4s var(--ease), opacity 0.3s var(--ease), background 0.3s var(--ease), border-color 0.3s var(--ease);
+}
+.car-card.on { opacity: 1; transform: none; border-color: var(--ink); background: var(--track); font-weight: 650; }
+.car-card .cdot { width: 11px; height: 11px; }
+.car-card.add { border-style: dashed; color: var(--muted); }
+.car-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.car-sub { margin-top: 1px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.car-sub.pos { color: #1b8a5a; }
+.car-sub.neg { color: #d92d20; }
+.car-foot { display: flex; align-items: center; justify-content: center; min-height: 28px; font-size: 12.5px; color: var(--muted); }
+.car-foot [hidden] { display: none; }
+.link-btn { padding: 4px 12px; border-radius: 999px; background: var(--keycap); color: var(--ink); font-size: 13px; font-weight: 600; }
+
+/* ---- 自訂類別視窗 ---- */
+.sheet.stack { z-index: 36; }
+.field-label { margin: 10px 0 8px; font-size: 13px; color: var(--muted); }
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding-bottom: 6px; }
+.swatch { aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; transition: transform 0.3s var(--ease), border-color 0.2s; }
+.swatch.on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--ink); transform: scale(0.92); }
+.del-btn.confirm { background: #d92d20; color: #fff; }
+
+/* 矮螢幕（例如 iPhone SE 橫向）：縮小鍵盤與間距，讓「儲存」仍在畫面內 */
+@media (max-height: 640px) {
+  .keypad button { height: 40px; }
+  .amount-line { padding: 2px 0; font-size: 38px; }
+  .car-card { min-height: 46px; }
+  .car-foot { min-height: 22px; }
+  .item-row { padding: 2px 0 4px; }
+  .save, .del-btn { height: 46px; }
+}

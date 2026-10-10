@@ -80,7 +80,7 @@ export function fullDate(d) {
 /**
  * 頂部日期標籤。
  * 日：2026年10月10日；週：2026年10月05日-2026年10月11日；
- * 月：10月（非今年時加上年份）；年：2026年。
+ * 月：2026年10月；年：2026年。
  */
 export function periodLabel(start, level, now) {
   switch (level) {
@@ -89,8 +89,7 @@ export function periodLabel(start, level, now) {
     case 'week':
       return `${fullDate(start)}-${fullDate(endOfPeriod(start, 'week'))}`;
     case 'month': {
-      const m = `${start.getMonth() + 1}月`;
-      return start.getFullYear() === now.getFullYear() ? m : `${start.getFullYear()}年${m}`;
+      return `${start.getFullYear()}年${start.getMonth() + 1}月`;
     }
     case 'year':
       return `${start.getFullYear()}年`;

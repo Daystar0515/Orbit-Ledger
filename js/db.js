@@ -8,10 +8,12 @@
 
 const DB_NAME = 'orbit';
 const STORE = 'entries';
-const VERSION = 1;
+const META = 'meta';
+const VERSION = 2;
 
 let db = null;
 const mem = new Map();
+const memMeta = new Map();
 
 /** 'idb'：存進瀏覽器的資料庫；'memory'：只存在這次開啟期間。 */
 export let mode = 'idb';
@@ -23,8 +25,12 @@ export async function init() {
     db = await new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, VERSION);
       req.onupgradeneeded = () => {
-        const store = req.result.createObjectStore(STORE, { keyPath: 'id' });
-        store.createIndex('date', 'date');
+        const d = req.result;
+        if (!d.objectStoreNames.contains(STORE)) {
+          const store = d.createObjectStore(STORE, { keyPath: 'id' });
+          store.createIndex('date', 'date');
+        }
+        if (!d.objectStoreNames.contains(META)) d.createObjectStore(META, { keyPath: 'key' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -39,12 +45,23 @@ export async function init() {
   return mode;
 }
 
+/** 讀取／寫入設定型資料（自訂類別、帳戶等）。value 要能轉成 JSON。 */
+export async function getMeta(key) {
+  if (!db) return memMeta.has(key) ? memMeta.get(key) : null;
+  const row = await run('readonly', (s) => s.get(key), META);
+  return row ? row.value : null;
+}
+export async function setMeta(key, value) {
+  if (!db) { memMeta.set(key, value); return; }
+  await run('readwrite', (s) => s.put({ key, value }), META);
+}
+
 /** 在一個交易裡執行 fn(store)；等整個交易確實寫入完成才回傳。 */
-function run(txMode, fn) {
+function run(txMode, fn, storeName = STORE) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, txMode);
+    const tx = db.transaction(storeName, txMode);
     let result;
-    const req = fn(tx.objectStore(STORE));
+    const req = fn(tx.objectStore(storeName));
     if (req && 'onsuccess' in req) req.onsuccess = () => { result = req.result; };
     tx.oncomplete = () => resolve(result);
     tx.onerror = () => reject(tx.error);

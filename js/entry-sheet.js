@@ -2,6 +2,8 @@
 
 import { makeSheet } from './sheet.js';
 import { catsOf, catColor, findCat } from './cats.js';
+import { createCarousel } from './carousel.js';
+import { createCatEditor } from './cat-editor.js';
 import { toKey, fromKey, shortDate, addPeriods } from './dateutil.js';
 
 const MAX_DIGITS = 8; // 最多 99,999,999 元
@@ -17,7 +19,9 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   const typeBtns = [...el.querySelectorAll('#sheet-type button')];
   const amountEl = $('sheet-amount');
   const amountText = $('amount-text');
-  const grid = $('cat-grid');
+  const grid = $('cat-car');
+  const hint = $('cat-hint');
+  const editBtn = $('cat-edit');
   const dateText = $('date-text');
   const dateInput = $('date-input');
   const prevBtn = $('date-prev');
@@ -48,25 +52,43 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
     });
   }
 
-  function renderCats() {
-    const cats = catsOf(s.type);
-    grid.className = `cat-grid cols${cats.length <= 4 ? 4 : 3}`;
-    grid.replaceChildren();
-    cats.forEach((cat) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `cat-chip${s.catId === cat.id ? ' on' : ''}`;
-      b.dataset.id = cat.id;
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(s.catId === cat.id));
-      const dot = document.createElement('span');
-      dot.className = 'cdot';
-      dot.style.background = catColor(cat);
-      const name = document.createElement('span');
-      name.textContent = cat.name;
-      b.append(dot, name);
-      grid.appendChild(b);
-    });
+  const carousel = createCarousel(grid, {
+    label: '類別，左右滑動更換',
+    addLabel: '新增類別',
+    onAdd: () => editor.open({ type: s.type }),
+    onChange(item) {
+      s.catId = item && !item.add ? item.id : null;
+      renderPlaceholder();
+      renderCatFoot();
+      renderAmount();
+    },
+  });
+
+  const editor = createCatEditor({
+    toast,
+    onDone(type, cat, deleted) {
+      if (type !== s.type) return;
+      if (deleted && s.catId === cat.id) s.catId = null;
+      renderCats(deleted ? null : cat.id);
+    },
+  });
+
+  /** 重畫類別輪播。selectId 沒給就維持目前選的類別。 */
+  function renderCats(selectId = s.catId) {
+    const items = catsOf(s.type).map((cat) => ({ id: cat.id, name: cat.name, color: catColor(cat, s.type), custom: !!cat.custom }));
+    carousel.setItems(items, selectId);
+    const v = carousel.value();
+    s.catId = v ? v.id : null;
+    renderPlaceholder();
+    renderCatFoot();
+    renderAmount();
+  }
+
+  function renderCatFoot() {
+    const cat = s.catId ? findCat(s.type, s.catId) : null;
+    const custom = !!(cat && cat.custom);
+    editBtn.hidden = !custom;
+    hint.hidden = custom;
   }
 
   /** 具體事項欄的提示：選了類別就顯示該類別的範例，例如「學習」→「例如：書本費」。 */
@@ -101,11 +123,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   function setType(type) {
     if (type === s.type) return;
     s.type = type;
-    s.catId = null; // 支出與收入的類別不同，換類型就要重選
     renderType();
-    renderCats();
-    renderPlaceholder();
-    renderAmount();
+    renderCats(null); // 支出與收入的類別不同，換類型就回到第一個類別
   }
 
   function pressKey(k) {
@@ -133,7 +152,7 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
       return;
     }
     if (!s.catId) {
-      toast('請選擇類別');
+      toast('請滑到要用的類別（不是「新增類別」）');
       shake(grid);
       return;
     }
@@ -164,17 +183,9 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
     const b = e.target.closest('button[data-type]');
     if (b) setType(b.dataset.type);
   });
-  grid.addEventListener('click', (e) => {
-    const b = e.target.closest('.cat-chip');
-    if (!b) return;
-    s.catId = b.dataset.id;
-    renderCats();
-    renderPlaceholder();
-    renderAmount();
-    // 選完類別，順手讓使用者知道下一步是輸入具體事項（不自動叫出鍵盤，免得蓋住類別）
-    noteInput.classList.remove('nudge');
-    void noteInput.offsetWidth;
-    noteInput.classList.add('nudge');
+  editBtn.addEventListener('click', () => {
+    const cat = s.catId ? findCat(s.type, s.catId) : null;
+    if (cat && cat.custom) editor.open({ type: s.type, cat });
   });
   $('keypad').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-k]');
@@ -236,8 +247,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   vv?.addEventListener('scroll', syncKeyboard);
 
   return {
-    isOpen: () => sheet.isOpen(),
-    close: () => sheet.close(),
+    isOpen: () => sheet.isOpen() || editor.isOpen(),
+    close: () => { editor.close(); sheet.close(); },
     /**
      * 新增：open({type})；編輯：open({entry})，欄位會預先填好。
      * @param {{type?:'expense'|'income', entry?:object}} [opts]
@@ -253,7 +264,7 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
       } else {
         s.type = type;
         s.digits = '';
-        s.catId = null;
+        s.catId = null; // 重畫輪播時會停在第一個類別
         s.note = '';
         s.dateKey = todayKey();
       }
@@ -261,13 +272,11 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
       noteInput.classList.remove('nudge');
       renderMode();
       renderType();
-      renderCats();
-      renderPlaceholder();
-      renderAmount();
+      sheet.open(); // 先開視窗，輪播才量得到寬度
+      renderCats(s.catId);
       renderDate();
-      sheet.open();
     },
     /** 深色／淺色模式切換時，更新類別圓點的顏色。 */
-    refreshTheme() { if (sheet.isOpen()) renderCats(); },
+    refreshTheme() { if (sheet.isOpen()) renderCats(); editor.refreshTheme(); },
   };
 }

@@ -6,7 +6,7 @@ const CY = 140;
 const R = 92;
 const SW = 24;
 const C = 2 * Math.PI * R;
-const GAP = 3; // 弧段之間的間隙（SVG 單位）
+const GAP = 4; // 弧段之間的間隙（SVG 單位）
 const MERGE_BELOW = 0.03; // 低於 3% 的類別合併成「其他」（僅顯示用）
 const LABEL_MIN = 0.05; // 低於 5% 的弧段不標百分比，點擊後才看得到
 
@@ -54,7 +54,20 @@ function el(name, attrs = {}) {
   return node;
 }
 
-export const SWEEP_MS = 900; // 圓環從 12 點鐘方向順時針填滿所需的時間
+export const SWEEP_MS = 1000; // 圓環從 12 點鐘方向順時針填滿所需的時間（要和 style.css 一致）
+const EASE = [0.4, 0, 0.2, 1]; // 掃描用的緩動曲線（要和 style.css 一致）
+const bez = (t, a, b) => 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * b + t ** 3;
+
+/** 掃描進行到圓環的 p（0～1）位置時，已經過了總時間的幾分之幾。用來讓百分比標籤剛好在弧段出現時浮現。 */
+export function sweepTimeAt(p) {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (bez(mid, EASE[1], EASE[3]) < p) lo = mid; else hi = mid;
+  }
+  return bez(lo, EASE[0], EASE[2]);
+}
 
 /**
  * 重畫圓環。
@@ -96,8 +109,11 @@ export function renderRing(svg, data, opts) {
 
   data.segments.forEach((seg) => {
     const len = seg.fraction * C;
+    // 弧段兩端是圓角：圓角會往兩邊各多出半個線寬，所以線段本身要縮短一個線寬；
+    // 太短的弧段至少會畫成一個圓點。只有一個弧段（整圈）時不需要圓角。
     const gap = multiple ? GAP : 0;
-    const dash = Math.max(len - gap, 0.5);
+    const dash = multiple ? Math.max(len - gap - SW, 0.01) : len;
+    const dashStart = acc + len / 2 - dash / 2;
     const circle = el('circle', {
       class: `seg${selectedId && selectedId !== seg.id ? ' dim' : ''}`,
       'data-id': seg.id,
@@ -107,8 +123,9 @@ export function renderRing(svg, data, opts) {
       fill: 'none',
       stroke: seg.color,
       'stroke-width': SW,
+      'stroke-linecap': multiple ? 'round' : 'butt',
       'stroke-dasharray': `${dash} ${C - dash}`,
-      'stroke-dashoffset': -(acc + gap / 2),
+      'stroke-dashoffset': -dashStart,
       tabindex: 0,
       role: 'button',
       'aria-label': `${seg.name} ${percentText(seg.fraction)}，${formatMoney(seg.amount)}`,
@@ -126,8 +143,8 @@ export function renderRing(svg, data, opts) {
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
       });
-      // 百分比等掃過自己的弧段中點才浮現（掃描是等速的，所以延遲 = 位置 × 總時間）。
-      if (animate) text.style.animationDelay = `${Math.round((mid / C) * SWEEP_MS)}ms`;
+      // 百分比等掃過自己的弧段中點才浮現（掃描有緩動，所以用曲線反推時間）。
+      if (animate) text.style.animationDelay = `${Math.round(sweepTimeAt(mid / C) * SWEEP_MS)}ms`;
       text.textContent = percentText(seg.fraction);
       labels.appendChild(text);
     }

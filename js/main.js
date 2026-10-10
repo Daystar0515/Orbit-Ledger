@@ -2,7 +2,7 @@ import {
   LEVEL_NAMES, startOfPeriod, endOfPeriod, periodLabel, canGoForward, shiftAnchor, levelUp, levelDown, toKey, fromKey,
 } from './dateutil.js';
 import { makeEntries } from './sample.js';
-import { findCat, catColor, onThemeChange, UNKNOWN_CAT } from './cats.js';
+import { findCat, catColor, onThemeChange, UNKNOWN_CAT, loadCustom, getCustom, onCatsChange, setColorBlind, mergeCustom } from './cats.js';
 import { totalsByCategory } from './stats.js';
 import { buildSegments, renderRing, percentText } from './ring.js';
 import { attachGestures } from './gestures.js';
@@ -26,7 +26,15 @@ const state = {
   selectedId: null,
   entries: [], // 帳本裡的真實帳目（從資料庫讀進來）
   showDemo: getPref('demo', false), // 示範資料：預設關閉
+  colorBlind: getPref('cb', false), // 紅綠色盲友善模式
 };
+
+/** 色盲模式：類別顏色走另一組調色盤，整個畫面的支出／收入色也用 data-cb 換掉。 */
+function applyColorBlind() {
+  setColorBlind(state.colorBlind);
+  document.documentElement.toggleAttribute('data-cb', state.colorBlind);
+}
+applyColorBlind();
 
 const els = {
   kicker: $('kicker'),
@@ -163,16 +171,33 @@ function render({ grow = true } = {}) {
   renderList(entries, state.level);
 }
 
-/** 中央金額：「NT$」做成較小的前綴，數字依位數縮小，避免碰到圓環內緣。 */
+/** 中央金額：「NT$」做成較小的前綴，數字依位數縮小，避免碰到圓環內緣。金額變動時數字會滾動過去。 */
+let tweenRaf = 0;
+let shownAmount = 0;
 function setAmount(n) {
-  const digits = nf.format(n);
-  const cur = document.createElement('span');
-  cur.className = 'cur';
-  cur.textContent = 'NT$';
-  const num = document.createElement('span');
-  num.textContent = digits;
-  els.amount.replaceChildren(cur, num);
-  els.amount.dataset.size = digits.length <= 5 ? 'l' : digits.length <= 7 ? 'm' : 's';
+  cancelAnimationFrame(tweenRaf);
+  const from = shownAmount;
+  shownAmount = n;
+  const draw = (v) => {
+    const digits = nf.format(Math.round(v));
+    const cur = document.createElement('span');
+    cur.className = 'cur';
+    cur.textContent = 'NT$';
+    const num = document.createElement('span');
+    num.textContent = digits;
+    els.amount.replaceChildren(cur, num);
+    els.amount.dataset.size = nf.format(n).length <= 5 ? 'l' : nf.format(n).length <= 7 ? 'm' : 's';
+  };
+  if (reduceMotion || from === n || Math.abs(n - from) < 2) { draw(n); return; }
+  const t0 = performance.now();
+  const dur = 420;
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / dur);
+    const eased = 1 - (1 - t) ** 3; // 先快後慢
+    draw(from + (n - from) * eased);
+    if (t < 1) tweenRaf = requestAnimationFrame(step);
+  };
+  tweenRaf = requestAnimationFrame(step);
 }
 
 function renderList(entries, level) {
@@ -187,9 +212,10 @@ function renderList(entries, level) {
     return;
   }
   const pad = (n) => String(n).padStart(2, '0');
-  for (const e of entries) {
+  entries.forEach((e, i) => {
     const li = document.createElement('li');
     li.className = e.demo ? 'row' : 'row swipe';
+    li.style.setProperty('--i', String(Math.min(i, 10))); // 進場動畫依序錯開，最多錯開 10 列
     li.dataset.id = e.id;
     if (!e.demo) {
       li.tabIndex = 0;
@@ -202,7 +228,7 @@ function renderList(entries, level) {
 
     const dot = document.createElement('span');
     dot.className = 'cdot';
-    dot.style.background = catColor(e.cat);
+    dot.style.background = catColor(e.cat, e.type);
 
     // 主標題是類別，副標題是自己輸入的具體事項（長期檢視時前面加上日期）
     const meta = document.createElement('div');
@@ -234,7 +260,7 @@ function renderList(entries, level) {
       li.appendChild(del);
     }
     els.list.appendChild(li);
-  }
+  });
 }
 
 // ---- 操作 ----
@@ -402,12 +428,22 @@ const settings = createSettings({
     setPref('demo', on);
     render({ grow: false });
   },
+  getCb: () => state.colorBlind,
+  setCb(on) {
+    state.colorBlind = on;
+    setPref('cb', on);
+    applyColorBlind();
+    render({ grow: false });
+    entrySheet.refreshTheme();
+  },
   getEntries: () => state.entries,
+  getCategories: () => getCustom(),
   toast,
   newId: db.newId,
   async applyImport(plan) {
     const rows = [...plan.add, ...plan.update];
     await db.putMany(rows); // 同一個交易：全部成功或全部不動
+    if (plan.cats) mergeCustom(plan.cats); // 備份裡的自訂類別（已存在的不會重複）
     const byId = new Map(state.entries.map((x) => [x.id, x]));
     rows.forEach((x) => byId.set(x.id, x));
     state.entries = [...byId.values()];
@@ -431,11 +467,18 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') render({ grow: false });
 });
 
+// 自訂類別有變動就存起來，畫面跟著更新
+onCatsChange((cats) => {
+  db.setMeta('cats', cats).catch(() => toast('類別沒有存成功，請再試一次'));
+  render({ grow: false });
+});
+
 // ---- 啟動 ----
 
 async function boot() {
   try {
     await db.init();
+    loadCustom(await db.getMeta('cats'));
     state.entries = await db.getAll();
   } catch (e) {
     toast('讀取帳目時發生問題，請重新開啟 Orbit', 4000);

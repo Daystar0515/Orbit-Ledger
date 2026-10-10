@@ -91,7 +91,11 @@
     </div>
 
     <div class="cat-wrap">
-      <div class="cat-grid cols3" id="cat-grid" role="radiogroup" aria-label="類別"></div>
+      <div id="cat-car" aria-label="類別，左右滑動更換"></div>
+      <div class="car-foot">
+        <span id="cat-hint">左右滑動更換類別</span>
+        <button type="button" class="link-btn" id="cat-edit" hidden>編輯此類別</button>
+      </div>
     </div>
 
     <div class="item-row">
@@ -120,6 +124,31 @@
     </div>
   </section>
 
+  <!-- 新增／編輯自訂類別（疊在記帳視窗上面） -->
+  <section class="sheet stack" id="cat-sheet" role="dialog" aria-modal="true" aria-label="新增類別" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="關閉">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <span class="head-title" id="cat-title">新增類別</span>
+        <span class="head-spacer"></span>
+      </div>
+    </div>
+    <div class="set-list">
+      <label class="field-label" for="cat-name">類別名稱（最多 8 個字）</label>
+      <input type="text" class="note-input" id="cat-name" maxlength="8" placeholder="例如：寵物" autocomplete="off" enterkeyhint="done">
+      <div class="field-label">顏色</div>
+      <div class="swatches" id="cat-swatches" role="radiogroup" aria-label="顏色"></div>
+      <div class="actions">
+        <button type="button" class="del-btn" id="cat-delete" hidden>刪除</button>
+        <button type="button" class="save" id="cat-save">加入</button>
+      </div>
+      <p class="set-sub" id="cat-note"></p>
+    </div>
+  </section>
+
   <!-- 設定 -->
   <section class="sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-label="設定" tabindex="-1">
     <div class="sheet-top">
@@ -139,6 +168,13 @@
           <div class="set-sub">加上假帳目，方便試看圓環與手勢。不會存進你的帳本，隨時可以關掉。</div>
         </div>
         <button type="button" class="switch" id="demo-switch" role="switch" aria-checked="false" aria-label="顯示示範資料"><span></span></button>
+      </div>
+      <div class="set-row">
+        <div class="set-text">
+          <div class="set-title">紅綠色盲友善模式</div>
+          <div class="set-sub">支出改用藍色系、收入改用黃色系，圓環、金額與類別顏色都會跟著換。</div>
+        </div>
+        <button type="button" class="switch" id="cb-switch" role="switch" aria-checked="false" aria-label="紅綠色盲友善模式"><span></span></button>
       </div>
       <div class="set-row">
         <div class="set-text">

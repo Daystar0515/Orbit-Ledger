@@ -43,7 +43,7 @@ test('日期標籤格式', () => {
   assert.equal(periodLabel(d(2026, 10, 10), 'day', now), '2026年10月10日');
   assert.equal(periodLabel(d(2026, 10, 5), 'day', now), '2026年10月05日');
   assert.equal(periodLabel(d(2026, 10, 5), 'week', now), '2026年10月05日-2026年10月11日');
-  assert.equal(periodLabel(d(2026, 10, 1), 'month', now), '10月');
+  assert.equal(periodLabel(d(2026, 10, 1), 'month', now), '2026年10月');
   assert.equal(periodLabel(d(2025, 10, 1), 'month', now), '2025年10月');
   assert.equal(periodLabel(d(2026, 1, 1), 'year', now), '2026年');
 });
