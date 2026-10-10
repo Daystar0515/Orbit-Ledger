@@ -1,0 +1,279 @@
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --ink: #1c1c1e;
+  --muted: #8a8a8e;
+  --track: #ecece9;
+  --line: #eeeeeb;
+  --dot: #cfcfcc;
+  --income: #1b8a5a;
+  --fab: rgba(28, 28, 30, 0.74);
+  --fab-ink: #ffffff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.06);
+  --wrap: min(92vw, 340px, 40dvh);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0f12;
+    --surface: #24252a;
+    --ink: #f2f2f4;
+    --muted: #8e8e93;
+    --track: #24252a;
+    --line: #1f2025;
+    --dot: #3a3b41;
+    --income: #46c48a;
+    --fab: rgba(242, 242, 244, 0.8);
+    --fab-ink: #111214;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.4);
+  }
+  .seg { filter: brightness(1.08); }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: -apple-system, "SF Pro Text", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-top: var(--safe-top);
+  overflow: hidden;
+}
+
+/* 頂部 */
+.top { flex: none; padding: 16px 20px 0; text-align: center; }
+.kicker { font-size: 12px; letter-spacing: 0.1em; color: var(--muted); }
+.period {
+  margin-top: 2px;
+  font-size: clamp(14px, 4.8vw, 20px);
+  font-weight: 650;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.type-switch {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.type-switch button {
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--muted);
+  transition: background 0.2s, color 0.2s;
+}
+.type-switch button.on {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+
+.demo-tag {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px);
+  right: 14px;
+  padding: 2px 8px;
+  border: 1px dashed var(--dot);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 圓環 */
+.ring-zone {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+  touch-action: none; /* 手勢由 JavaScript 處理，避免瀏覽器捲動或縮放 */
+}
+.ring-wrap { position: relative; width: var(--wrap); aspect-ratio: 1; }
+.ring-wrap svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.track { stroke: var(--track); }
+.seg {
+  cursor: pointer;
+  outline: none;
+  transition: stroke-dasharray 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+}
+.seg.dim { opacity: 0.28; }
+.pct {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.pct.dim { opacity: 0.3; }
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  pointer-events: none;
+}
+.c-caption { font-size: 13px; color: var(--muted); }
+.c-amount {
+  font-family: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang TC", system-ui, sans-serif;
+  font-size: calc(var(--wrap) * 0.115);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.c-amount[data-size="m"] { font-size: calc(var(--wrap) * 0.095); }
+.c-amount[data-size="s"] { font-size: calc(var(--wrap) * 0.075); }
+.c-amount .cur {
+  margin-right: 0.22em;
+  font-size: 0.5em;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.c-sub { min-height: 1.2em; font-size: 12.5px; color: var(--muted); }
+
+.anim-from-left { animation: from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-from-right { animation: from-right 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-fade { animation: fade-in 0.3s ease; }
+.anim-bump { animation: bump 0.3s ease; }
+@keyframes from-left { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
+@keyframes from-right { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes bump { 0% { transform: none; } 40% { transform: translateX(-14px); } 100% { transform: none; } }
+
+/* 層級圓點（比照 iOS 主畫面） */
+.dots-zone {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  touch-action: none;
+}
+.dot-btn {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--dot);
+  transition: width 0.25s ease, background 0.25s ease;
+}
+.dot-btn::after { content: ""; position: absolute; inset: -12px -6px; }
+.dot-btn.on { width: 22px; background: var(--ink); }
+.dot-btn:focus { outline: none; }
+.dot-btn:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
+
+/* 明細列表 */
+.list-zone { position: relative; flex: 1; min-height: 0; }
+#list {
+  list-style: none;
+  height: 100%;
+  overflow-y: auto;
+  padding: 2px 20px calc(150px + var(--safe-bottom));
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 120px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 120px), transparent);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cdot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.meta { flex: 1; min-width: 0; }
+.cat { font-size: 15px; font-weight: 600; }
+.note { margin-top: 1px; font-size: 12.5px; color: var(--muted); }
+.amt { flex: none; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.amt.income { color: var(--income); }
+.empty { padding: 28px 0; text-align: center; font-size: 14px; color: var(--muted); }
+
+/* 新增按鈕：半透明圓形，畫面中央偏下 */
+.fab {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 34px);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--fab);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease;
+}
+.fab::before, .fab::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 2.5px;
+  margin: -1.25px 0 0 -11px;
+  border-radius: 2px;
+  background: var(--fab-ink);
+}
+.fab::after { transform: rotate(90deg); }
+.fab:active { transform: translateX(-50%) scale(0.93); }
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 112px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Orbit</title>
+  <meta name="description" content="Orbit：用一個圓環看收支的記帳 App">
+  <meta name="theme-color" content="#FAFAF8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E0F12" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Orbit">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main id="app">
+    <span class="demo-tag">示範資料</span>
+
+    <header class="top">
+      <div class="kicker" id="kicker"></div>
+      <h1 class="period" id="period"></h1>
+      <div class="type-switch" id="type-switch" role="group" aria-label="圓環類型">
+        <button type="button" data-type="expense">支出</button>
+        <button type="button" data-type="income">收入</button>
+      </div>
+    </header>
+
+    <section class="ring-zone" id="ring-zone" aria-label="收支圓環">
+      <div class="ring-wrap" id="ring-wrap">
+        <svg id="ring" viewBox="0 0 280 280" role="img"></svg>
+        <div class="center" aria-hidden="true">
+          <span class="c-caption" id="c-caption"></span>
+          <span class="c-amount" id="c-amount"></span>
+          <span class="c-sub" id="c-sub"></span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="dots-zone" id="dots-zone" aria-label="時間層級">
+      <button type="button" class="dot-btn" data-level="day" aria-label="日"></button>
+      <button type="button" class="dot-btn" data-level="week" aria-label="週"></button>
+      <button type="button" class="dot-btn" data-level="month" aria-label="月"></button>
+      <button type="button" class="dot-btn" data-level="year" aria-label="年"></button>
+    </nav>
+
+    <section class="list-zone" aria-label="帳目明細">
+      <ul id="list"></ul>
+    </section>
+
+    <button type="button" class="fab" id="fab" aria-label="新增帳目"></button>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <noscript>Orbit 需要開啟 JavaScript 才能使用。</noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

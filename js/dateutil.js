@@ -1,0 +1,99 @@
+// 日期與期間計算：全部以裝置的本地時區為準，一週從週一開始。
+
+export const LEVELS = ['day', 'week', 'month', 'year'];
+export const LEVEL_NAMES = { day: '日', week: '週', month: '月', year: '年' };
+
+const pad = (n) => String(n).padStart(2, '0');
+
+export function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** 回傳 date 所在期間的第一天（00:00）。 */
+export function startOfPeriod(date, level) {
+  const d = startOfDay(date);
+  switch (level) {
+    case 'day':
+      return d;
+    case 'week': {
+      const sinceMonday = (d.getDay() + 6) % 7;
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday);
+    }
+    case 'month':
+      return new Date(d.getFullYear(), d.getMonth(), 1);
+    case 'year':
+      return new Date(d.getFullYear(), 0, 1);
+    default:
+      throw new Error(`未知的層級：${level}`);
+  }
+}
+
+/** start 必須是期間的第一天；回傳往前（負數）或往後（正數）n 個期間的第一天。 */
+export function addPeriods(start, level, n) {
+  switch (level) {
+    case 'day':
+      return new Date(start.getFullYear(), start.getMonth(), start.getDate() + n);
+    case 'week':
+      return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7 * n);
+    case 'month':
+      return new Date(start.getFullYear(), start.getMonth() + n, 1);
+    case 'year':
+      return new Date(start.getFullYear() + n, 0, 1);
+    default:
+      throw new Error(`未知的層級：${level}`);
+  }
+}
+
+/** 期間的最後一天（含）。 */
+export function endOfPeriod(start, level) {
+  const next = addPeriods(start, level, 1);
+  return new Date(next.getFullYear(), next.getMonth(), next.getDate() - 1);
+}
+
+export function fullDate(d) {
+  return `${d.getFullYear()}年${pad(d.getMonth() + 1)}月${pad(d.getDate())}日`;
+}
+
+/**
+ * 頂部日期標籤。
+ * 日：2026年10月10日；週：2026年10月05日-2026年10月11日；
+ * 月：10月（非今年時加上年份）；年：2026年。
+ */
+export function periodLabel(start, level, now) {
+  switch (level) {
+    case 'day':
+      return fullDate(start);
+    case 'week':
+      return `${fullDate(start)}-${fullDate(endOfPeriod(start, 'week'))}`;
+    case 'month': {
+      const m = `${start.getMonth() + 1}月`;
+      return start.getFullYear() === now.getFullYear() ? m : `${start.getFullYear()}年${m}`;
+    }
+    case 'year':
+      return `${start.getFullYear()}年`;
+    default:
+      throw new Error(`未知的層級：${level}`);
+  }
+}
+
+/** 還能不能往較近的期間滑（最近只到今天所在的期間）。 */
+export function canGoForward(anchor, level, now) {
+  return startOfPeriod(anchor, level).getTime() < startOfPeriod(now, level).getTime();
+}
+
+/** 以 anchor 所在期間為基準，移動 n 個期間，並限制不超過今天所在期間；回傳新的 anchor。 */
+export function shiftAnchor(anchor, level, n, now) {
+  const next = addPeriods(startOfPeriod(anchor, level), level, n);
+  const limit = startOfPeriod(now, level);
+  return next.getTime() > limit.getTime() ? limit : next;
+}
+
+export function levelUp(level) {
+  const i = LEVELS.indexOf(level);
+  return LEVELS[Math.min(i + 1, LEVELS.length - 1)];
+}
+
+export function levelDown(level) {
+  const i = LEVELS.indexOf(level);
+  return LEVELS[Math.max(i - 1, 0)];
+}
