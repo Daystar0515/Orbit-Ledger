@@ -6,14 +6,20 @@ const PINCH_OUT = 1.25; // 兩指距離放大到 125% 以上 → 放大
 
 /**
  * @param {HTMLElement} el 要偵測手勢的區域（CSS 需設 touch-action: none）
- * @param {{onSwipe?:(dir:'left'|'right'|'up'|'down')=>void, onPinch?:(dir:'in'|'out')=>void}} handlers
+ * @param {{onSwipe?:(dir:'left'|'right'|'up'|'down')=>void, onPinch?:(dir:'in'|'out')=>void,
+ *          onPinchMove?:(ratio:number)=>void, onPinchEnd?:(ratio:number)=>void}} handlers
+ *   有 onPinchMove／onPinchEnd 時改成「即時跟手」：縮放過程一直回報比例，放開手指才回報結果。
  */
+export const PINCH_THRESHOLDS = { in: PINCH_IN, out: PINCH_OUT };
+
 export function attachGestures(el, handlers) {
   const points = new Map();
   let start = null;
   let multi = false;
   let pinchStart = 0;
   let pinchDone = false;
+  let lastRatio = 1;
+  const live = !!(handlers.onPinchMove || handlers.onPinchEnd);
 
   const distance = () => {
     const [a, b] = [...points.values()];
@@ -29,12 +35,18 @@ export function attachGestures(el, handlers) {
       multi = true;
       pinchStart = distance();
       pinchDone = false;
+      lastRatio = 1;
     }
   });
 
   el.addEventListener('pointermove', (e) => {
     if (!points.has(e.pointerId)) return;
     points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (points.size === 2 && live && pinchStart > 0) {
+      lastRatio = distance() / pinchStart;
+      handlers.onPinchMove?.(lastRatio);
+      return;
+    }
     if (points.size === 2 && !pinchDone && pinchStart > 0) {
       const ratio = distance() / pinchStart;
       if (ratio < PINCH_IN) {
@@ -50,7 +62,12 @@ export function attachGestures(el, handlers) {
   const finish = (e) => {
     if (!points.has(e.pointerId)) return;
     const wasSingle = points.size === 1;
+    const wasPinch = points.size === 2;
     points.delete(e.pointerId);
+    if (wasPinch && live && pinchStart > 0) {
+      pinchStart = 0;
+      handlers.onPinchEnd?.(lastRatio);
+    }
     if (wasSingle && start && !multi && e.type === 'pointerup') {
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;

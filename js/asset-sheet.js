@@ -1,0 +1,109 @@
+// 資產頁：上方「資產」與淨資產，下面依現金、信用卡、存款三大類列出子帳戶。
+// 大類名稱靠左、子帳戶合計靠右；子帳戶名稱靠左、金額靠右。
+// 現金與存款用綠色（收入色），信用卡欠款用紅色（支出色），並在下方小字顯示自訂額度上限。
+
+import { makeSheet } from './sheet.js';
+import { KINDS, KIND_ORDER, getAccounts, balances, kindTotals } from './accounts.js';
+
+const $ = (id) => document.getElementById(id);
+const nf = new Intl.NumberFormat('zh-TW');
+const money = (n) => `${n < 0 ? '-' : ''}NT$ ${nf.format(Math.abs(n))}`;
+
+/** @param {{getEntries:()=>object[], editor:object}} deps */
+export function createAssetSheet({ getEntries, editor }) {
+  const el = $('asset-sheet');
+  const groups = $('asset-groups');
+  const net = $('net-amt');
+
+  const sheet = makeSheet(el, { onOpen: () => draw() });
+
+  /** 現金／存款：正數綠、負數紅；信用卡：有欠款就紅。 */
+  const tone = (kind, n) => (kind === 'credit' ? (n > 0 ? 'neg' : 'zero') : n < 0 ? 'neg' : n > 0 ? 'pos' : 'zero');
+
+  function draw() {
+    const list = getAccounts();
+    const bal = balances(list, getEntries());
+    const t = kindTotals(list, bal);
+    net.textContent = money(t.net);
+    net.className = `net-amt ${t.net < 0 ? 'neg' : ''}`;
+    groups.replaceChildren();
+
+    for (const kind of KIND_ORDER) {
+      const g = document.createElement('section');
+      g.className = 'a-group';
+      g.dataset.kind = kind;
+
+      const head = document.createElement('div');
+      head.className = 'a-head';
+      const hn = document.createElement('span');
+      hn.className = 'a-name';
+      hn.textContent = KINDS[kind].name;
+      const ht = document.createElement('span');
+      ht.className = `a-sum ${tone(kind, t[kind])}`;
+      ht.textContent = money(t[kind]);
+      head.append(hn, ht);
+      g.appendChild(head);
+
+      const accs = list.filter((a) => a.kind === kind);
+      if (accs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'a-empty';
+        empty.textContent = `還沒有${KINDS[kind].name}帳戶`;
+        g.appendChild(empty);
+      }
+      for (const a of accs) {
+        const v = bal.get(a.id) || 0;
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'a-row';
+        row.dataset.id = a.id;
+        const left = document.createElement('span');
+        left.className = 'a-left';
+        const nm = document.createElement('span');
+        nm.className = 'a-acc';
+        nm.textContent = a.name;
+        left.appendChild(nm);
+        if (kind === 'credit') {
+          const sub = document.createElement('span');
+          sub.className = 'a-sub';
+          sub.textContent = a.limit
+            ? `額度上限 NT$ ${nf.format(a.limit)}・可用 NT$ ${nf.format(Math.max(0, a.limit - v))}`
+            : '尚未設定額度上限';
+          left.appendChild(sub);
+        }
+        const amt = document.createElement('span');
+        amt.className = `a-amt ${tone(kind, v)}`;
+        amt.textContent = money(v);
+        row.append(left, amt);
+        row.setAttribute('aria-label', `${a.name} ${money(v)}，點一下編輯`);
+        g.appendChild(row);
+      }
+
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'a-add';
+      add.dataset.kind = kind;
+      add.textContent = `＋ 新增${KINDS[kind].name}帳戶`;
+      g.appendChild(add);
+      groups.appendChild(g);
+    }
+  }
+
+  groups.addEventListener('click', (e) => {
+    const row = e.target.closest('.a-row');
+    if (row) {
+      const acc = getAccounts().find((a) => a.id === row.dataset.id);
+      if (acc) editor.open({ acc, onDone: draw });
+      return;
+    }
+    const add = e.target.closest('.a-add');
+    if (add) editor.open({ kind: add.dataset.kind, fixedKind: true, onDone: draw });
+  });
+
+  return {
+    open: () => sheet.open(),
+    close: () => sheet.close(),
+    isOpen: () => sheet.isOpen(),
+    refresh: () => { if (sheet.isOpen()) draw(); },
+  };
+}

@@ -1,18 +1,24 @@
 import {
-  LEVEL_NAMES, startOfPeriod, endOfPeriod, periodLabel, canGoForward, shiftAnchor, levelUp, levelDown, toKey, fromKey,
+  LEVELS, LEVEL_NAMES, startOfPeriod, endOfPeriod, periodLabel, canGoForward, shiftAnchor, levelUp, levelDown, toKey, fromKey,
 } from './dateutil.js';
 import { makeEntries } from './sample.js';
 import { findCat, catColor, onThemeChange, UNKNOWN_CAT, loadCustom, getCustom, onCatsChange, setColorBlind, mergeCustom } from './cats.js';
 import { totalsByCategory } from './stats.js';
 import { buildSegments, renderRing, percentText } from './ring.js';
-import { renderOrbit, stopOrbit } from './orbit.js';
-import { attachGestures } from './gestures.js';
+import { renderOrbit, stopOrbit, collapseOrbit } from './orbit.js';
+import { createDatePicker } from './date-picker.js';
+import { loadAccounts, getAccounts, onAccountsChange, mergeAccounts } from './accounts.js';
+import { createAccEditor } from './acc-editor.js';
+import { createAssetSheet } from './asset-sheet.js';
+import { createSearchSheet } from './search-sheet.js';
+import { attachGestures, PINCH_THRESHOLDS } from './gestures.js';
 import * as db from './db.js';
 import { getPref, setPref } from './prefs.js';
 import { anySheetOpen } from './sheet.js';
 import { createEntrySheet } from './entry-sheet.js';
 import { createSettings } from './settings.js';
 import { attachRowSwipe } from './list-gestures.js';
+import { toView, makeRow, transferText } from './rows.js';
 
 const $ = (id) => document.getElementById(id);
 const nf = new Intl.NumberFormat('zh-TW');
@@ -28,7 +34,7 @@ const state = {
   entries: [], // 帳本裡的真實帳目（從資料庫讀進來）
   showDemo: getPref('demo', false), // 示範資料：預設關閉
   colorBlind: getPref('cb', false), // 紅綠色盲友善模式
-  view: getPref('view', 'ring') === 'orbit' ? 'orbit' : 'ring', // 圓環或行星軌道
+  view: getPref('view', 'orbit') === 'ring' ? 'ring' : 'orbit', // 行星軌道（預設）或圓環
 };
 
 /** 色盲模式：類別顏色走另一組調色盤，整個畫面的支出／收入色也用 data-cb 換掉。 */
@@ -41,6 +47,7 @@ applyColorBlind();
 const els = {
   kicker: $('kicker'),
   period: $('period'),
+  periodBtn: $('period-btn'),
   ring: $('ring'),
   ringWrap: $('ring-wrap'),
   ringZone: $('ring-zone'),
@@ -92,23 +99,6 @@ function playAnim(cls) {
 
 // ---- 資料 ----
 
-/** 把資料庫裡的一筆帳目轉成畫面用的格式。日期不合法的帳目直接略過。 */
-function toView(e) {
-  const date = fromKey(e.date);
-  if (!date) return null;
-  return {
-    id: e.id,
-    type: e.type,
-    catId: e.catId,
-    cat: findCat(e.type, e.catId) || UNKNOWN_CAT,
-    amount: e.amount,
-    date,
-    note: e.note || '',
-    createdAt: e.createdAt || 0,
-    demo: false,
-  };
-}
-
 /** 取得某個期間要顯示的全部帳目（真實帳目，加上選擇顯示的示範資料），新的在上面。 */
 function entriesFor(level, start, today) {
   const from = toKey(start);
@@ -123,7 +113,21 @@ function entriesFor(level, start, today) {
 
 // ---- 畫面 ----
 
-function render({ grow = true } = {}) {
+/** 頂部標題與層級圓點（切換層級時要先更新，不必等行星動畫）。 */
+function renderHeader() {
+  const today = new Date();
+  const start = startOfPeriod(state.anchor, state.level);
+  els.kicker.textContent = `${LEVEL_NAMES[state.level]}檢視`;
+  els.period.textContent = periodLabel(start, state.level, today);
+  els.dotsZone.querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.level === state.level;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'true' : 'false');
+  });
+}
+
+/** @param {{grow?:boolean, from?:'in'|'out'}} [opts] from：行星從太陽（in）或從外圍（out）飛回軌道 */
+function render({ grow = true, from = 'in' } = {}) {
   const today = new Date();
   const start = startOfPeriod(state.anchor, state.level);
   const entries = entriesFor(state.level, start, today);
@@ -133,8 +137,7 @@ function render({ grow = true } = {}) {
   const selected = data.segments.find((s) => s.id === state.selectedId) || null;
 
   // 頂部
-  els.kicker.textContent = `${LEVEL_NAMES[state.level]}檢視`;
-  els.period.textContent = periodLabel(start, state.level, today);
+  renderHeader();
   els.demoTag.hidden = !state.showDemo;
 
   // 支出／收入切換
@@ -144,19 +147,12 @@ function render({ grow = true } = {}) {
     b.setAttribute('aria-pressed', String(on));
   });
 
-  // 層級圓點
-  els.dotsZone.querySelectorAll('button').forEach((b) => {
-    const on = b.dataset.level === state.level;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-current', on ? 'true' : 'false');
-  });
-
   // 圓環與中央文字
   const ringOpts = { selectedId: state.selectedId, animate: grow && !reduceMotion, formatMoney: money };
   els.ringWrap.dataset.view = state.view;
   if (state.view === 'orbit') {
     const tint = getComputedStyle(document.documentElement).getPropertyValue(state.type === 'income' ? '--income' : '--expense').trim();
-    renderOrbit(els.ring, data, { ...ringOpts, tint, reduce: reduceMotion, isPaused: anySheetOpen });
+    renderOrbit(els.ring, data, { ...ringOpts, tint, from, reduce: reduceMotion, isPaused: anySheetOpen });
   } else {
     stopOrbit();
     renderRing(els.ring, data, ringOpts);
@@ -221,55 +217,8 @@ function renderList(entries, level) {
     els.list.appendChild(li);
     return;
   }
-  const pad = (n) => String(n).padStart(2, '0');
   entries.forEach((e, i) => {
-    const li = document.createElement('li');
-    li.className = e.demo ? 'row' : 'row swipe';
-    li.style.setProperty('--i', String(Math.min(i, 10))); // 進場動畫依序錯開，最多錯開 10 列
-    li.dataset.id = e.id;
-    if (!e.demo) {
-      li.tabIndex = 0;
-      li.setAttribute('role', 'button');
-      li.setAttribute('aria-label', `${e.cat.name}${e.note ? ` ${e.note}` : ''} ${money(e.amount)}，點一下編輯`);
-    }
-
-    const fg = document.createElement('div');
-    fg.className = 'row-fg';
-
-    const dot = document.createElement('span');
-    dot.className = 'cdot';
-    dot.style.background = catColor(e.cat, e.type);
-
-    // 主標題是類別，副標題是自己輸入的具體事項（長期檢視時前面加上日期）
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    const cat = document.createElement('div');
-    cat.className = 'cat';
-    cat.textContent = e.cat.name;
-    const note = document.createElement('div');
-    note.className = 'note';
-    const parts = [];
-    if (level !== 'day') parts.push(`${pad(e.date.getMonth() + 1)}/${pad(e.date.getDate())}`);
-    if (e.note) parts.push(e.note);
-    note.textContent = parts.join(' · ');
-    meta.append(cat);
-    if (parts.length) meta.append(note);
-
-    const amt = document.createElement('div');
-    amt.className = `amt ${e.type}`;
-    amt.textContent = `${e.type === 'income' ? '+' : '-'}${nf.format(e.amount)}`;
-
-    fg.append(dot, meta, amt);
-    li.appendChild(fg);
-    if (!e.demo) {
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'row-del';
-      del.textContent = '刪除';
-      del.tabIndex = -1;
-      li.appendChild(del);
-    }
-    els.list.appendChild(li);
+    els.list.appendChild(makeRow(e, { showDate: level !== 'day', editable: !e.demo, index: i }));
   });
 }
 
@@ -287,20 +236,41 @@ function go(n) {
   render({ grow: false });
 }
 
-function setLevel(level) {
-  if (level === state.level) return;
+/**
+ * 換層級（也可以同時換日期）。行星模式下有轉場：
+ *   看更長的期間（日→週→月→年）：整個星系收進太陽，再從太陽向外散開成新的資料；
+ *   看更短的期間：行星向外飛散，新的行星再從外圍落回軌道。
+ */
+let levelSeq = 0;
+async function setLevel(level, anchor = null) {
+  const sameDay = !anchor || startOfPeriod(anchor, level).getTime() === startOfPeriod(state.anchor, level).getTime();
+  if (level === state.level && sameDay) return;
+  const dir = LEVELS.indexOf(level) >= LEVELS.indexOf(state.level) ? 'in' : 'out';
+  const seq = ++levelSeq;
   state.level = level;
+  if (anchor) state.anchor = anchor;
   state.selectedId = null;
   playAnim(null);
-  render();
+  renderHeader();
+  if (state.view === 'orbit' && !reduceMotion) await collapseOrbit(dir);
+  if (seq !== levelSeq) return; // 動畫期間又換了一次，以最後一次為準
+  render({ from: dir });
 }
 
-function setType(type) {
+/** 切換支出／收入。行星模式下是「日食」：月亮遮住太陽、太陽換色，再露出新的行星。 */
+let typeSeq = 0;
+async function setType(type) {
   if (type === state.type) return;
+  const seq = ++typeSeq;
   state.type = type;
   state.selectedId = null;
   playAnim(null);
-  render();
+  els.typeSwitch.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.type === type));
+  if (state.view === 'orbit' && !reduceMotion) {
+    await collapseOrbit('eclipse', 380);
+    if (seq !== typeSeq) return;
+    render({ from: 'eclipse' });
+  } else render();
 }
 
 const toggleType = () => setType(state.type === 'expense' ? 'income' : 'expense');
@@ -311,8 +281,22 @@ attachGestures(els.ringZone, {
     else if (dir === 'left') go(1); // 向左滑：往較近
     else toggleType(); // 上下滑：切換支出／收入圓環
   },
-  onPinch(dir) {
-    setLevel(dir === 'in' ? levelUp(state.level) : levelDown(state.level)); // 縮小：日→週→月→年
+  // 雙指縮放即時跟手：圓環／星系跟著手指縮放，放開時超過門檻才換層級，否則彈回原狀
+  onPinchMove(ratio) {
+    const r = Math.max(0.55, Math.min(1.5, ratio));
+    els.ringWrap.classList.add('pinching');
+    els.ringWrap.style.setProperty('--pinch', String(1 + (r - 1) * 0.6));
+  },
+  onPinchEnd(ratio) {
+    els.ringWrap.classList.remove('pinching');
+    els.ringWrap.style.removeProperty('--pinch'); // 用 CSS transition 彈回
+    if (ratio < PINCH_THRESHOLDS.in) {
+      const next = levelUp(state.level); // 縮小：日→週→月→年
+      if (next === state.level) playAnim('anim-bump'); else setLevel(next);
+    } else if (ratio > PINCH_THRESHOLDS.out) {
+      const next = levelDown(state.level);
+      if (next === state.level) playAnim('anim-bump'); else setLevel(next);
+    }
   },
 });
 
@@ -373,7 +357,7 @@ window.addEventListener('keydown', (e) => {
 
 /** 回到某筆帳目所在的那一天與圓環，讓使用者馬上看到結果。 */
 function showEntry(entry, { sweep = true } = {}) {
-  state.type = entry.type;
+  if (entry.type !== 'transfer') state.type = entry.type; // 轉帳不影響圓環，維持目前的支出／收入
   state.anchor = fromKey(entry.date) || new Date();
   state.selectedId = null;
   playAnim(null);
@@ -381,6 +365,7 @@ function showEntry(entry, { sweep = true } = {}) {
 }
 
 const entryName = (e) => {
+  if (e.type === 'transfer') return `轉帳 ${transferText(e)}`;
   const cat = findCat(e.type, e.catId);
   return `${cat ? cat.name : ''}${e.note ? ` ${e.note}` : ''}`.trim();
 };
@@ -405,15 +390,18 @@ async function removeEntry(entry) {
   });
 }
 
+const accEditor = createAccEditor({ toast, onDone() {} });
+
 const entrySheet = createEntrySheet({
   newId: db.newId,
   toast,
+  accEditor,
   async onSave(entry, isEdit) {
     await db.put(entry); // 確定寫進資料庫才算成功
     if (isEdit) state.entries = state.entries.map((x) => (x.id === entry.id ? entry : x));
     else state.entries.push(entry);
     db.requestPersistence(); // 請瀏覽器盡量別自動清掉這份資料
-    showEntry(entry, { sweep: !isEdit });
+    showEntry(entry, { sweep: !isEdit && entry.type !== 'transfer' });
     toast(`${isEdit ? '已更新' : '已記下'} ${entryName(entry)} ${money(entry.amount)}`);
   },
   onDelete: removeEntry,
@@ -430,6 +418,18 @@ const rowSwipe = attachRowSwipe(els.list, {
   },
   onDemoTap() { toast('這是示範資料，不能編輯；可到設定關掉'); },
 });
+
+const datePicker = createDatePicker({
+  getLevel: () => state.level,
+  getAnchor: () => state.anchor,
+  getEntryKeys: () => new Set(state.entries.map((e) => e.date)),
+  onLevel: (level) => setLevel(level),
+  onPick(level, date) {
+    const today = new Date();
+    setLevel(level, date > today ? today : date);
+  },
+});
+els.periodBtn.addEventListener('click', () => datePicker.open());
 
 const settings = createSettings({
   getDemo: () => state.showDemo,
@@ -455,12 +455,14 @@ const settings = createSettings({
   },
   getEntries: () => state.entries,
   getCategories: () => getCustom(),
+  getAccounts: () => getAccounts(),
   toast,
   newId: db.newId,
   async applyImport(plan) {
     const rows = [...plan.add, ...plan.update];
     await db.putMany(rows); // 同一個交易：全部成功或全部不動
     if (plan.cats) mergeCustom(plan.cats); // 備份裡的自訂類別（已存在的不會重複）
+    if (plan.accounts) mergeAccounts(plan.accounts); // 備份裡的帳戶（已存在的不會重複）
     const byId = new Map(state.entries.map((x) => [x.id, x]));
     rows.forEach((x) => byId.set(x.id, x));
     state.entries = [...byId.values()];
@@ -471,7 +473,16 @@ const settings = createSettings({
   },
 });
 
+const assetSheet = createAssetSheet({ getEntries: () => state.entries, editor: accEditor });
+const searchSheet = createSearchSheet({
+  getViews: () => state.entries.map(toView).filter(Boolean),
+  getAnchor: () => state.anchor,
+  getLevel: () => state.level,
+});
+
 els.fab.addEventListener('click', () => entrySheet.open({ type: state.type }));
+$('asset-btn').addEventListener('click', () => assetSheet.open());
+$('search-btn').addEventListener('click', () => searchSheet.open());
 els.gear.addEventListener('click', () => settings.open());
 
 onThemeChange(() => {
@@ -490,12 +501,22 @@ onCatsChange((cats) => {
   render({ grow: false });
 });
 
+// 帳戶有變動（新增、改名、刪除）就存起來
+onAccountsChange((accs) => {
+  db.setMeta('accounts', accs).catch(() => toast('帳戶沒有存成功，請再試一次'));
+  render({ grow: false });
+  entrySheet.refreshAccounts();
+  assetSheet.refresh();
+});
+
 // ---- 啟動 ----
 
 async function boot() {
   try {
     await db.init();
     loadCustom(await db.getMeta('cats'));
+    const accData = await db.getMeta('accounts');
+    if (loadAccounts(accData)) await db.setMeta('accounts', getAccounts()); // 第一次使用：存下預設帳戶
     state.entries = await db.getAll();
   } catch (e) {
     toast('讀取帳目時發生問題，請重新開啟 Orbit', 4000);

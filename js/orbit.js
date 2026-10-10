@@ -19,6 +19,9 @@ const STAGGER_MS = 90;
 const LABEL_MIN = 0.05;
 
 let loop = null;
+let current = null; // 目前畫面上的行星，給收縮動畫用
+let collapse = null; // { t0, ms, dir, done }
+let settleFrom = null; // 上一次收縮的方向：新畫面的太陽要從那個狀態恢復
 let simT = 0; // 累計的「轉動時間」（秒）；重畫時不歸零，行星才不會跳位置
 
 function el(name, attrs = {}) {
@@ -27,7 +30,29 @@ function el(name, attrs = {}) {
   return node;
 }
 
+/**
+ * 換層級前的轉場：dir 'in' 讓整個星系收進太陽；'out' 讓行星向外飛散。
+ * 動畫結束後 resolve，再由呼叫端畫出新資料（新的行星會從太陽或外圍飛回軌道）。
+ */
+export function collapseOrbit(dir = 'in', ms = 360) {
+  if (!loop || !current || !current.svg.isConnected) return Promise.resolve();
+  if (collapse) collapse.done();
+  settleFrom = dir;
+  if (dir === 'eclipse') {
+    // 日食：月亮從左邊滑進來遮住太陽，行星在陰影裡淡出
+    const sun = current.svg.querySelector('.sun-glow');
+    const moon = el('circle', { class: 'moon cover', cx: CX, cy: CY, r: 66, stroke: current.tint });
+    if (sun) sun.after(moon); else current.svg.appendChild(moon);
+  } else current.svg.querySelector('.orbits')?.classList.add('fading');
+  if (dir !== 'eclipse') current.svg.querySelector('.sun-glow')?.classList.add(dir === 'in' ? 'pulse' : 'dim');
+  return new Promise((resolve) => {
+    collapse = { t0: performance.now(), ms, dir, done: () => { collapse = null; resolve(); } };
+  });
+}
+
 export function stopOrbit() {
+  if (collapse) collapse.done();
+  current = null;
   if (!loop) return;
   cancelAnimationFrame(loop.raf);
   clearTimeout(loop.timer);
@@ -64,7 +89,7 @@ function* stars(seed = 7) {
  * @param {{tint:string, reduce:boolean, isPaused:()=>boolean}} opts
  */
 export function renderOrbit(svg, data, opts) {
-  const { selectedId, animate, formatMoney, tint, reduce, isPaused } = opts;
+  const { selectedId, animate, formatMoney, tint, reduce, isPaused, from = 'in' } = opts;
   stopOrbit();
   svg.replaceChildren();
 
@@ -93,7 +118,13 @@ export function renderOrbit(svg, data, opts) {
     sky.appendChild(c);
   }
   svg.appendChild(sky);
-  svg.appendChild(el('circle', { class: 'sun-glow', cx: CX, cy: CY, r: 84, fill: 'url(#sun-glow)' }));
+  const sun = el('circle', { class: `sun-glow${settleFrom ? ` settle-${settleFrom}` : ''}`, cx: CX, cy: CY, r: 84, fill: 'url(#sun-glow)' });
+  settleFrom = null;
+  svg.appendChild(sun);
+  if (from === 'eclipse') {
+    // 日食後半段：月亮從太陽前面往右滑開，露出換了顏色的太陽與新的行星
+    svg.appendChild(el('circle', { class: 'moon reveal', cx: CX, cy: CY, r: 66, stroke: tint }));
+  }
 
   const planets = layoutPlanets(data.segments);
 
@@ -142,22 +173,47 @@ export function renderOrbit(svg, data, opts) {
   const ease = (t) => 1 - (1 - t) ** 3;
   const start = performance.now();
 
+  const easeIn = (t) => t * t * t;
+
   function place(now) {
     const since = now - start;
     let busy = false;
+    // 收縮轉場進行中：c 從 0 到 1
+    let c = 0;
+    if (collapse) {
+      c = easeIn(Math.min(1, (now - collapse.t0) / collapse.ms));
+      busy = true;
+    }
+    const out = collapse && collapse.dir === 'out';
+    const ecl = collapse && collapse.dir === 'eclipse';
     for (const { p, g, body, label } of nodes) {
       const k = animate ? ease(Math.min(1, Math.max(0, (since - p.delay) / APPEAR_MS))) : 1;
       if (k < 1) busy = true;
+      // 進場：從太陽（in）或從外圍（out）回到軌道；收縮：反過來
+      let rf = from === 'out' ? 2.3 - 1.3 * k : from === 'eclipse' ? 1 : k;
+      let sc = from === 'eclipse' ? 0.7 + 0.3 * k : 0.2 + 0.8 * k;
+      let op = from === 'out' || from === 'eclipse' ? k : 1;
+      if (c > 0 && ecl) {
+        sc *= 1 - 0.3 * c;
+        op *= 1 - c;
+      } else if (c > 0) {
+        rf *= out ? 1 + 1.3 * c : 1 - c;
+        sc *= out ? 1 - 0.4 * c : 1 - 0.8 * c;
+        op *= out ? 1 - c : 1 - 0.6 * c;
+      }
       const a = p.a0 + p.omega * simT;
-      const x = CX + p.r * k * Math.cos(a);
-      const y = CY + p.r * k * Math.sin(a);
+      const x = CX + p.r * rf * Math.cos(a);
+      const y = CY + p.r * rf * Math.sin(a);
       g.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
-      body.setAttribute('transform', `scale(${(0.2 + 0.8 * k).toFixed(3)})`);
-      if (label) label.style.opacity = String(k);
+      body.setAttribute('transform', `scale(${sc.toFixed(3)})`);
+      g.style.opacity = op < 1 ? op.toFixed(3) : '';
+      if (label) label.style.opacity = String(c > 0 ? Math.max(0, k - 2 * c) : k);
     }
+    if (collapse && c >= 1) collapse.done();
     return busy;
   }
 
+  current = { svg, tint };
   if (reduce) { place(start + 1e6); return; }
 
   loop = { raf: 0, timer: 0 };

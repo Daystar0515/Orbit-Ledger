@@ -5,11 +5,11 @@ import { findCat } from './cats.js';
 import { fromKey, toKey } from './dateutil.js';
 
 export const BACKUP_APP = 'orbit';
-export const BACKUP_VERSION = 2; // 2：多了自訂類別（讀得懂版本 1 的舊備份）
+export const BACKUP_VERSION = 3; // 2：多了自訂類別；3：多了帳戶與轉帳（讀得懂舊版備份）
 export const MAX_AMOUNT = 99999999;
 export const NOTE_MAX = 40;
 const MAX_FILE_CHARS = 20 * 1024 * 1024; // 超過 20MB 的字串不是正常的備份
-const TYPE_NAMES = { expense: '支出', income: '收入' };
+const TYPE_NAMES = { expense: '支出', income: '收入', transfer: '轉帳' };
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -20,27 +20,27 @@ export function backupFileName(now = new Date(), ext = 'json') {
 
 /** 只留下帳本需要的欄位，並整理成固定格式。 */
 function cleanEntry(e) {
-  const out = {
-    id: e.id,
-    type: e.type,
-    catId: e.catId,
-    amount: e.amount,
-    date: e.date,
-    note: e.note || '',
-    createdAt: e.createdAt || 0,
-  };
+  const out = { id: e.id, type: e.type };
+  if (e.type === 'transfer') {
+    out.fromId = e.fromId;
+    out.toId = e.toId;
+  } else {
+    out.catId = e.catId;
+    if (e.accountId) out.accountId = e.accountId;
+  }
+  Object.assign(out, { amount: e.amount, date: e.date, note: e.note || '', createdAt: e.createdAt || 0 });
   if (e.updatedAt) out.updatedAt = e.updatedAt;
   return out;
 }
 
 /** 做出備份檔的文字內容（JSON）。示範資料不會在 entries 裡，所以不會被備份。 */
-export function buildBackup(entries, now = new Date(), categories = { expense: [], income: [] }) {
+export function buildBackup(entries, now = new Date(), categories = { expense: [], income: [] }, accounts = []) {
   const list = entries
     .filter((e) => !e.demo)
     .map(cleanEntry)
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
   return JSON.stringify(
-    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, categories, entries: list },
+    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, categories, accounts, entries: list },
     null,
     1,
   );
@@ -49,8 +49,12 @@ export function buildBackup(entries, now = new Date(), categories = { expense: [
 /** 檢查單筆帳目；合格就回傳整理過的帳目，否則回傳 null。 */
 export function validateEntry(raw, makeId) {
   if (!raw || typeof raw !== 'object') return null;
-  if (raw.type !== 'expense' && raw.type !== 'income') return null;
-  if (typeof raw.catId !== 'string' || !raw.catId) return null;
+  const isTransfer = raw.type === 'transfer';
+  if (raw.type !== 'expense' && raw.type !== 'income' && !isTransfer) return null;
+  const okId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 100;
+  if (isTransfer) {
+    if (!okId(raw.fromId) || !okId(raw.toId) || raw.fromId === raw.toId) return null;
+  } else if (!okId(raw.catId)) return null;
   if (!Number.isInteger(raw.amount) || raw.amount < 1 || raw.amount > MAX_AMOUNT) return null;
   if (typeof raw.date !== 'string' || !fromKey(raw.date) || toKey(fromKey(raw.date)) !== raw.date) return null;
   let id = raw.id;
@@ -60,7 +64,13 @@ export function validateEntry(raw, makeId) {
   }
   const note = typeof raw.note === 'string' ? raw.note.trim().slice(0, NOTE_MAX) : '';
   const createdAt = Number.isFinite(raw.createdAt) ? raw.createdAt : 0;
-  const out = { id, type: raw.type, catId: raw.catId, amount: raw.amount, date: raw.date, note, createdAt };
+  const out = { id, type: raw.type };
+  if (isTransfer) Object.assign(out, { fromId: raw.fromId, toId: raw.toId });
+  else {
+    out.catId = raw.catId;
+    if (okId(raw.accountId)) out.accountId = raw.accountId;
+  }
+  Object.assign(out, { amount: raw.amount, date: raw.date, note, createdAt });
   if (Number.isFinite(raw.updatedAt) && raw.updatedAt > 0) out.updatedAt = raw.updatedAt;
   return out;
 }
@@ -96,11 +106,13 @@ export function parseBackup(text, makeId) {
   }
   const c = data.categories && typeof data.categories === 'object' ? data.categories : {};
   const categories = { expense: Array.isArray(c.expense) ? c.expense : [], income: Array.isArray(c.income) ? c.income : [] };
-  return { ok: true, entries, skipped, categories, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
+  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  return { ok: true, entries, skipped, categories, accounts, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
 }
 
 const sameEntry = (a, b) =>
-  a.type === b.type && a.catId === b.catId && a.amount === b.amount && a.date === b.date && a.note === b.note;
+  a.type === b.type && a.catId === b.catId && a.amount === b.amount && a.date === b.date && a.note === b.note
+  && (a.accountId || '') === (b.accountId || '') && (a.fromId || '') === (b.fromId || '') && (a.toId || '') === (b.toId || '');
 const stamp = (e) => e.updatedAt || e.createdAt || 0;
 
 /**
@@ -134,18 +146,27 @@ function csvCell(v) {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** 匯出給試算表看的 CSV（開頭加 BOM，Excel 才不會把中文讀成亂碼）。 */
-export function buildCsv(entries) {
+/**
+ * 匯出給試算表看的 CSV（開頭加 BOM，Excel 才不會把中文讀成亂碼）。
+ * @param {object[]} entries
+ * @param {{id:string,name:string}[]} [accounts] 用來把帳戶編號換成名稱
+ */
+export function buildCsv(entries, accounts = []) {
+  const accName = (id) => (accounts.find((a) => a.id === id) || {}).name || '';
   const rows = entries
     .filter((e) => !e.demo)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || 0) - (b.createdAt || 0));
-  const lines = [['日期', '收支', '類別', '具體事項', '金額'].join(',')];
+  const lines = [['日期', '收支', '類別', '具體事項', '金額', '帳戶'].join(',')];
   for (const e of rows) {
+    if (e.type === 'transfer') {
+      lines.push([e.date, TYPE_NAMES.transfer, '', e.note || '', e.amount, `${accName(e.fromId)} → ${accName(e.toId)}`].map(csvCell).join(','));
+      continue;
+    }
     const cat = findCat(e.type, e.catId);
-    lines.push([e.date, TYPE_NAMES[e.type] || e.type, cat ? cat.name : e.catId, e.note || '', e.amount].map(csvCell).join(','));
+    lines.push([e.date, TYPE_NAMES[e.type] || e.type, cat ? cat.name : e.catId, e.note || '', e.amount, accName(e.accountId)].map(csvCell).join(','));
   }
-  return `﻿${lines.join('\r\n')}\r\n`;
+  return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
 /** 「上次備份」的顯示文字。 */

@@ -28,7 +28,12 @@
 
     <header class="top">
       <div class="kicker" id="kicker"></div>
-      <h1 class="period" id="period"></h1>
+      <h1 class="period">
+        <button type="button" class="period-btn" id="period-btn" aria-label="選擇日期與顯示期間">
+          <span id="period"></span>
+          <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </h1>
       <div class="type-switch" id="type-switch" role="group" aria-label="圓環類型">
         <button type="button" data-type="expense">支出</button>
         <button type="button" data-type="income">收入</button>
@@ -57,7 +62,15 @@
       <ul id="list"></ul>
     </section>
 
-    <button type="button" class="fab" id="fab" aria-label="新增帳目"></button>
+    <div class="fab-row">
+      <button type="button" class="fab fab-icon" id="asset-btn" aria-label="資產">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>
+      </button>
+      <button type="button" class="fab" id="fab" aria-label="新增帳目"></button>
+      <button type="button" class="fab fab-icon" id="search-btn" aria-label="搜尋">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>
+      </button>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </main>
 
@@ -74,6 +87,7 @@
         <div class="type-switch" id="sheet-type" role="group" aria-label="收支類型">
           <button type="button" data-type="expense">支出</button>
           <button type="button" data-type="income">收入</button>
+          <button type="button" data-type="transfer">轉帳</button>
         </div>
         <div class="date-ctl">
           <button type="button" class="step" id="date-prev" aria-label="前一天">‹</button>
@@ -96,6 +110,15 @@
         <span id="cat-hint">左右滑動更換類別</span>
         <button type="button" class="link-btn" id="cat-edit" hidden>編輯此類別</button>
       </div>
+    </div>
+
+    <div class="acc-wrap" id="acc-wrap">
+      <div class="car-label" id="acc-label">付款方式</div>
+      <div id="acc-car" class="acc-car"></div>
+    </div>
+    <div class="acc-wrap" id="to-wrap" hidden>
+      <div class="car-label">轉入</div>
+      <div id="to-car" class="acc-car"></div>
     </div>
 
     <div class="item-row">
@@ -146,6 +169,100 @@
         <button type="button" class="save" id="cat-save">加入</button>
       </div>
       <p class="set-sub" id="cat-note"></p>
+    </div>
+  </section>
+
+  <!-- 資產 -->
+  <section class="sheet tall" id="asset-sheet" role="dialog" aria-modal="true" aria-label="資產" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <span class="head-spacer"></span>
+        <span class="head-title big">資產</span>
+        <button type="button" class="icon-btn" data-close aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+    <div class="asset-body">
+      <div class="net">
+        <div class="net-label">淨資產（現金＋存款－信用卡欠款）</div>
+        <div class="net-amt" id="net-amt"></div>
+      </div>
+      <div id="asset-groups"></div>
+    </div>
+  </section>
+
+  <!-- 新增／編輯帳戶（疊在資產頁或記帳視窗上面） -->
+  <section class="sheet stack" id="acc-sheet" role="dialog" aria-modal="true" aria-label="新增帳戶" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <span class="head-title" id="acc-title">新增帳戶</span>
+        <span class="head-spacer"></span>
+      </div>
+    </div>
+    <div class="set-list">
+      <div class="type-switch acc-kinds" id="acc-kinds" role="group" aria-label="帳戶類型">
+        <button type="button" data-kind="cash">現金</button>
+        <button type="button" data-kind="credit">信用卡</button>
+        <button type="button" data-kind="bank">存款</button>
+      </div>
+      <label class="field-label" for="acc-name">名稱（最多 10 個字）</label>
+      <input type="text" class="note-input" id="acc-name" maxlength="10" autocomplete="off" enterkeyhint="next">
+      <label class="field-label" for="acc-opening" id="acc-opening-label">目前餘額</label>
+      <input type="text" class="note-input" id="acc-opening" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="off" placeholder="0">
+      <div id="acc-limit-row" hidden>
+        <label class="field-label" for="acc-limit">額度上限（自訂）</label>
+        <input type="text" class="note-input" id="acc-limit" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="off" placeholder="例如：50000">
+      </div>
+      <div class="actions">
+        <button type="button" class="del-btn" id="acc-delete" hidden>刪除</button>
+        <button type="button" class="save" id="acc-save">加入</button>
+      </div>
+      <p class="set-sub" id="acc-note"></p>
+    </div>
+  </section>
+
+  <!-- 搜尋 -->
+  <section class="sheet tall" id="search-sheet" role="dialog" aria-modal="true" aria-label="搜尋" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="search-head">
+        <input type="search" class="search-input" id="search-input" placeholder="搜尋，例如：午餐" enterkeyhint="search" autocomplete="off" aria-label="搜尋具體事項或類別">
+      </div>
+    </div>
+    <div id="search-car" class="range-car" aria-label="搜尋範圍，左右滑動切換日週月年"></div>
+    <div class="search-count" id="search-count"></div>
+    <ul class="search-list" id="search-list"></ul>
+  </section>
+
+  <!-- 選擇日期與期間 -->
+  <section class="sheet" id="date-sheet" role="dialog" aria-modal="true" aria-label="選擇日期" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <span class="head-spacer"></span>
+        <span class="head-title">選擇日期</span>
+        <button type="button" class="icon-btn" data-close aria-label="關閉">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="dp-body">
+      <div class="type-switch dp-levels" id="dp-levels" role="group" aria-label="顯示期間">
+        <button type="button" data-level="day">日</button>
+        <button type="button" data-level="week">週</button>
+        <button type="button" data-level="month">月</button>
+        <button type="button" data-level="year">年</button>
+      </div>
+      <div class="dp-nav">
+        <button type="button" class="step" id="dp-prev" aria-label="上一頁">‹</button>
+        <span class="dp-title" id="dp-title"></span>
+        <button type="button" class="step" id="dp-next" aria-label="下一頁">›</button>
+      </div>
+      <div class="dp-week" id="dp-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+      <div class="dp-grid" id="dp-grid" role="grid"></div>
+      <button type="button" class="pill-btn dp-today" id="dp-today">回到今天</button>
     </div>
   </section>
 

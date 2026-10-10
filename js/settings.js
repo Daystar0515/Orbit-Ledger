@@ -5,6 +5,7 @@ import * as db from './db.js';
 import { getPref, setPref } from './prefs.js';
 import { buildBackup, buildCsv, parseBackup, planImport, backupFileName, lastBackupText } from './backup.js';
 import { newCustomCount } from './cats.js';
+import { newAccountCount } from './accounts.js';
 import { saveTextFile, pickTextFile } from './files.js';
 
 const $ = (id) => document.getElementById(id);
@@ -13,7 +14,7 @@ const $ = (id) => document.getElementById(id);
  * @param {{getDemo:()=>boolean, setDemo:(on:boolean)=>void, getEntries:()=>object[],
  *          applyImport:(plan:object)=>Promise<void>, toast:(msg:string, ms?:number)=>void, newId:()=>string}} deps
  */
-export function createSettings({ getDemo, setDemo, getView, setView, getCb, setCb, getCategories, getEntries, applyImport, toast, newId }) {
+export function createSettings({ getDemo, setDemo, getView, setView, getCb, setCb, getCategories, getAccounts, getEntries, applyImport, toast, newId }) {
   const el = $('settings-sheet');
   const sw = $('demo-switch');
   const cbSw = $('cb-switch');
@@ -87,7 +88,7 @@ export function createSettings({ getDemo, setDemo, getView, setView, getCb, setC
     if (entries.length === 0) { toast('還沒有帳目可以匯出'); return; }
     const now = new Date();
     const isJson = kind === 'json';
-    const text = isJson ? buildBackup(entries, now, getCategories()) : buildCsv(entries);
+    const text = isJson ? buildBackup(entries, now, getCategories(), getAccounts()) : buildCsv(entries, getAccounts());
     const result = await saveTextFile({
       name: backupFileName(now, isJson ? 'json' : 'csv'),
       text,
@@ -120,14 +121,17 @@ export function createSettings({ getDemo, setDemo, getView, setView, getCb, setC
     if (res.entries.length === 0) { toast('備份檔裡沒有可匯入的帳目', 3500); return; }
     const plan = planImport(getEntries(), res.entries);
     plan.cats = res.categories;
+    plan.accounts = res.accounts;
     const newCats = newCustomCount(res.categories);
-    if (plan.add.length + plan.update.length === 0 && newCats === 0) {
+    const newAccs = newAccountCount(res.accounts);
+    if (plan.add.length + plan.update.length === 0 && newCats === 0 && newAccs === 0) {
       toast('這份備份的帳目都已經在手機上了', 3500);
       return;
     }
     const lines = [`備份檔共 ${res.entries.length} 筆：新增 ${plan.add.length} 筆`];
     if (plan.update.length) lines.push(`更新 ${plan.update.length} 筆（備份裡的版本較新）`);
     if (newCats) lines.push(`自訂類別 ${newCats} 個`);
+    if (newAccs) lines.push(`帳戶 ${newAccs} 個`);
     if (plan.same + plan.keptLocal) lines.push(`${plan.same + plan.keptLocal} 筆維持手機上現有的`);
     if (res.skipped) lines.push(`${res.skipped} 筆格式不正確，已略過`);
     summary.textContent = `${lines.join('；')}。匯入不會刪除手機上現有的任何帳目。`;

@@ -81,7 +81,7 @@ input { font: inherit; color: inherit; -webkit-user-select: text; user-select: t
 .kicker { font-size: 12px; letter-spacing: 0.1em; color: var(--muted); }
 .period {
   margin-top: 2px;
-  font-size: clamp(14px, 4.8vw, 20px);
+  font-size: clamp(13px, 4.3vw, 20px);
   font-weight: 650;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -620,3 +620,180 @@ html[data-cb] { --income: #946400; --expense: #1d608e; }
 .planet .halo { stroke-width: 1.5; opacity: 0.6; }
 .planet .pct { font-size: 10.5px; }
 .planet:focus-visible .halo { opacity: 1; }
+
+/* 行星：換層級的轉場 */
+.orbits { transition: opacity 0.3s var(--ease); }
+.orbits.fading { opacity: 0; }
+.sun-glow { transform-box: fill-box; transform-origin: center; transition: transform 0.36s var(--ease-io), opacity 0.36s var(--ease-io); }
+.sun-glow.pulse { transform: scale(1.3); }
+.sun-glow.dim { opacity: 0.35; }
+.sun-glow.settle-in { animation: sun-settle-in 0.7s var(--ease) both; }
+.sun-glow.settle-out { animation: sun-settle-out 0.7s var(--ease) both; }
+@keyframes sun-settle-in { from { transform: scale(1.3); } to { transform: none; } }
+@keyframes sun-settle-out { from { opacity: 0.35; } to { opacity: 1; } }
+
+/* 頂部日期：可以點 */
+.period-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: inherit;
+  transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.period-btn:active { background: var(--track); transform: scale(0.97); }
+.period-btn .chev { color: var(--muted); flex: none; }
+
+/* 日期選擇器 */
+.dp-body { display: flex; flex-direction: column; align-items: stretch; padding-bottom: 6px; }
+.dp-levels { align-self: center; margin-top: 2px; }
+.dp-levels button { padding: 6px 20px; }
+.dp-nav { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 4px; }
+.dp-nav .step { border-radius: var(--r-sm); }
+.dp-title { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.dp-week, .dp-grid[data-mode="days"] { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.dp-week[hidden] { display: none; }
+.dp-week span { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0; }
+.dp-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); min-height: 252px; align-content: start; }
+.dp-cell {
+  position: relative;
+  height: 40px;
+  border-radius: var(--r-sm);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease), transform 0.2s var(--ease);
+}
+.dp-grid:not([data-mode="days"]) .dp-cell { height: 52px; background: var(--keycap); }
+.dp-cell:active:not(:disabled) { transform: scale(0.94); }
+.dp-cell:disabled { color: var(--dot); cursor: default; }
+.dp-cell.faint { visibility: hidden; }
+.dp-cell.today { box-shadow: inset 0 0 0 1.5px var(--muted); }
+.dp-cell.on { background: var(--ink); color: var(--bg); font-weight: 650; box-shadow: none; }
+.dp-dot { position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--expense); }
+.dp-cell.on .dp-dot { background: var(--bg); }
+.dp-today { align-self: center; margin-top: 12px; }
+
+/* 行星：日食（切換支出／收入） */
+.moon { fill: var(--bg); stroke-width: 2.5; stroke-opacity: 0.55; }
+.moon.cover { animation: moon-cover 0.38s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.moon.reveal { animation: moon-reveal 0.62s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both; }
+@keyframes moon-cover { from { transform: translateX(-240px); } to { transform: none; } }
+@keyframes moon-reveal { from { transform: none; } to { transform: translateX(240px); } }
+
+/* 雙指縮放時，圓環／星系跟著手指即時縮放；放開後彈回 */
+.ring-wrap { transform: scale(var(--pinch, 1)); transition: transform 0.45s var(--ease); }
+.ring-wrap.pinching { transition: none; }
+
+/* ---- 底部三顆圓形按鈕：資產｜新增｜搜尋 ---- */
+.fab-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--safe-bottom) + 34px);
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  pointer-events: none;
+}
+.fab-row .fab { position: relative; left: auto; bottom: auto; transform: none; pointer-events: auto; }
+.fab-row .fab:active { transform: scale(0.93); }
+.fab-icon { display: grid; place-items: center; color: var(--fab-ink); }
+.fab-icon::before, .fab-icon::after { display: none; }
+
+/* ---- 記帳視窗：帳戶輪播與轉帳 ---- */
+.acc-wrap { flex: none; margin: 0 -16px; overflow: hidden; }
+.acc-wrap[hidden], .cat-wrap[hidden] { display: none; }
+.car-label { padding: 2px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+.acc-car { padding-top: 2px; padding-bottom: 6px; }
+.acc-car .car-card { width: 124px; min-height: 46px; border-radius: 16px; font-size: 14.5px; }
+.sheet[data-type="transfer"] .amount-line { color: var(--ink); }
+.type-switch button { white-space: nowrap; }
+#sheet-type button { padding: 5px 13px; }
+
+/* 明細：轉帳列 */
+.tdot { background: transparent; border: 2px solid var(--muted); width: 10px; height: 10px; box-sizing: border-box; }
+.amt.transfer { color: var(--muted); }
+
+/* ---- 高的半版視窗（資產、搜尋） ---- */
+.sheet.tall { height: calc(100dvh - var(--safe-top) - 36px); }
+.head-title.big { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+
+/* 資產頁 */
+.asset-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 20px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.net { padding: 6px 0 16px; text-align: center; }
+.net-label { font-size: 12.5px; color: var(--muted); }
+.net-amt { margin-top: 2px; font-family: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.net-amt.neg { color: var(--expense); }
+.a-group { margin-bottom: 14px; padding: 4px 14px 8px; border-radius: 20px; background: var(--bg); }
+.a-head { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0 8px; border-bottom: 1px solid var(--line); }
+.a-name { font-size: 17px; font-weight: 700; }
+.a-sum { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.a-row { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); text-align: left; border-radius: 0; }
+.a-row:active { opacity: 0.6; }
+.a-left { display: flex; flex-direction: column; min-width: 0; }
+.a-acc { font-size: 15.5px; }
+.a-sub { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.a-amt { flex: none; font-size: 15.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pos { color: var(--income); }
+.neg { color: var(--expense); }
+.zero { color: var(--muted); }
+.a-empty { padding: 12px 0; font-size: 13.5px; color: var(--muted); }
+.a-add { margin: 10px 0 2px; padding: 6px 12px; border-radius: 999px; background: var(--keycap); font-size: 13.5px; font-weight: 600; }
+.acc-kinds { display: flex; width: 100%; margin: 6px 0 2px; }
+.acc-kinds button { flex: 1; }
+.acc-kinds button:disabled { opacity: 0.35; }
+.set-list .note-input + .field-label, #acc-limit-row .field-label { margin-top: 14px; }
+
+/* 搜尋頁 */
+.search-head { padding: 4px 0 10px; }
+.search-input {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--keycap);
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-input::placeholder { color: var(--muted); font-weight: 500; font-size: 17px; }
+.search-input::-webkit-search-cancel-button { display: none; }
+.range-car { flex: none; margin: 0 -16px; }
+.range-car .car-card { scroll-snap-stop: always; width: 236px; min-height: 86px; padding: 10px 14px; border-radius: 22px; justify-content: flex-start; }
+.rc { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.rc-top { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 206px; }
+.rc-sums { display: flex; flex-direction: column; align-items: flex-start; font-family: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.rc-exp { color: var(--expense); }
+.rc-inc { color: var(--income); }
+.rc-none { font-size: 15px; font-weight: 600; color: var(--muted); font-family: inherit; }
+.search-count { flex: none; padding: 2px 0 6px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.search-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; padding-bottom: 20px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.search-list .row-fg { background: var(--surface); }
+
+/* 中等高度的螢幕（iPhone SE 直向等）：記帳視窗再緊湊一些 */
+@media (max-height: 760px) {
+  .keypad button { height: 42px; }
+  .amount-line { padding: 4px 0 2px; font-size: 40px; }
+  .car-card { min-height: 48px; }
+  .acc-car .car-card { min-height: 40px; }
+  .car-foot { min-height: 20px; }
+  .item-row { padding: 2px 0 6px; }
+  .note-input { height: 40px; }
+  .save, .del-btn { height: 48px; }
+}
+
+/* 很矮的螢幕（橫向等）：拿掉說明小字，讓「儲存」留在畫面內 */
+@media (max-height: 640px) {
+  .car-label, #cat-hint { display: none; }
+  .car-foot { min-height: 0; }
+  .keypad button { height: 38px; }
+  .acc-car .car-card { min-height: 36px; }
+  .car-card { min-height: 42px; }
+}

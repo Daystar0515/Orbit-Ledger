@@ -3,9 +3,10 @@
 
 /**
  * @param {HTMLElement} root
- * @param {{onChange:(item:object|null)=>void, onAdd?:()=>void, addLabel?:string, label?:string}} opts
+ * @param {{onChange:(item:object|null)=>void, onAdd?:()=>void, addLabel?:string, label?:string, renderItem?:(item:object)=>Node}} opts
+ *   renderItem：自訂卡片內容（例如搜尋頁的期間總額卡）
  */
-export function createCarousel(root, { onChange, onAdd, addLabel = '新增', label = '' }) {
+export function createCarousel(root, { onChange, onAdd, addLabel = '新增', label = '', renderItem = null }) {
   let items = [];
   let index = 0;
   let timer = 0;
@@ -90,6 +91,11 @@ export function createCarousel(root, { onChange, onAdd, addLabel = '新增', lab
         b.className = `car-card${it.add ? ' add' : ''}`;
         b.dataset.id = it.id;
         b.setAttribute('role', 'option');
+        if (renderItem && !it.add) {
+          b.appendChild(renderItem(it));
+          root.appendChild(b);
+          return;
+        }
         if (it.color) {
           const dot = document.createElement('span');
           dot.className = 'cdot';
@@ -123,5 +129,6 @@ export function createCarousel(root, { onChange, onAdd, addLabel = '新增', lab
       if (i >= 0) scrollToIndex(i, smooth);
     },
     count: () => items.length,
+    selectedId: () => (items[index] ? items[index].id : null),
   };
 }

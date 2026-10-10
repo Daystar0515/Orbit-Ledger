@@ -1,10 +1,13 @@
-// 新增／編輯帳目的半版視窗：金額（內建數字鍵盤）、類別、具體事項（自己輸入）、日期。
+// 新增／編輯帳目的半版視窗：金額（內建數字鍵盤）、類別、帳戶、具體事項（自己輸入）、日期。
+// 類型有支出、收入、轉帳；轉帳時不選類別，改成選「轉出」與「轉入」兩個帳戶。
 
 import { makeSheet } from './sheet.js';
 import { catsOf, catColor, findCat } from './cats.js';
 import { createCarousel } from './carousel.js';
 import { createCatEditor } from './cat-editor.js';
 import { toKey, fromKey, shortDate, addPeriods } from './dateutil.js';
+import { KINDS, accountsFor, getAccounts, findAccount } from './accounts.js';
+import { getPref, setPref } from './prefs.js';
 
 const MAX_DIGITS = 8; // 最多 99,999,999 元
 const NOTE_MAX = 40;
@@ -12,9 +15,10 @@ const nf = new Intl.NumberFormat('zh-TW');
 const $ = (id) => document.getElementById(id);
 
 /**
- * @param {{onSave:(entry:object, isEdit:boolean)=>Promise<void>|void, onDelete:(entry:object)=>Promise<void>|void, toast:(msg:string)=>void, newId:()=>string}} deps
+ * @param {{onSave:(entry:object, isEdit:boolean)=>Promise<void>|void, onDelete:(entry:object)=>Promise<void>|void,
+ *          toast:(msg:string)=>void, newId:()=>string, accEditor:object}} deps
  */
-export function createEntrySheet({ onSave, onDelete, toast, newId }) {
+export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) {
   const el = $('entry-sheet');
   const typeBtns = [...el.querySelectorAll('#sheet-type button')];
   const amountEl = $('sheet-amount');
@@ -29,8 +33,12 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   const noteInput = $('note-input');
   const saveBtn = $('sheet-save');
   const delBtn = $('sheet-delete');
+  const catWrap = el.querySelector('.cat-wrap');
+  const accCar = $('acc-car');
+  const accLabel = $('acc-label');
+  const toWrap = $('to-wrap');
 
-  const s = { type: 'expense', digits: '', catId: null, dateKey: '', note: '', editing: null };
+  const s = { type: 'expense', digits: '', catId: null, accountId: null, toId: null, dateKey: '', note: '', editing: null };
   let saving = false;
 
   const sheet = makeSheet(el, {
@@ -41,7 +49,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   });
 
   const todayKey = () => toKey(new Date());
-  const valid = () => Number(s.digits) > 0 && !!s.catId;
+  const isT = () => s.type === 'transfer';
+  const valid = () => Number(s.digits) > 0 && !!s.accountId && (isT() ? !!s.toId && s.toId !== s.accountId : !!s.catId);
 
   function renderType() {
     el.dataset.type = s.type;
@@ -73,8 +82,57 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
     },
   });
 
+  // ---- 帳戶 ----
+  const accItems = (list) => list.map((a) => ({ id: a.id, name: a.name, sub: KINDS[a.kind].name }));
+  const addAcc = (which) => accEditor.open({
+    kind: s.type === 'income' ? 'bank' : 'cash',
+    onDone(acc, deleted) {
+      if (deleted || !acc) { renderAccounts(); return; }
+      if (which === 'to') s.toId = acc.id; else s.accountId = acc.id;
+      renderAccounts();
+    },
+  });
+  const fromCar = createCarousel(accCar, {
+    label: '帳戶，左右滑動更換',
+    addLabel: '新增帳戶',
+    onAdd: () => addAcc('from'),
+    onChange(item) { s.accountId = item && !item.add ? item.id : null; renderAmount(); },
+  });
+  const toCar = createCarousel($('to-car'), {
+    label: '轉入帳戶，左右滑動更換',
+    addLabel: '新增帳戶',
+    onAdd: () => addAcc('to'),
+    onChange(item) { s.toId = item && !item.add ? item.id : null; renderAmount(); },
+  });
+
+  /** 預設帳戶：上次用的；沒有就用第一個能用的。 */
+  function pickDefault(list, key, avoid = null) {
+    const last = getPref(key, null);
+    if (last && list.some((a) => a.id === last) && last !== avoid) return last;
+    const first = list.find((a) => a.id !== avoid);
+    return first ? first.id : null;
+  }
+
+  function renderAccounts() {
+    const fromList = isT() ? getAccounts() : accountsFor(s.type);
+    if (!fromList.some((a) => a.id === s.accountId)) s.accountId = pickDefault(fromList, isT() ? 'lastAcc.from' : `lastAcc.${s.type}`);
+    fromCar.setItems(accItems(fromList), s.accountId);
+    s.accountId = fromCar.value() ? fromCar.value().id : null;
+    accLabel.textContent = isT() ? '轉出' : s.type === 'income' ? '存入' : '付款方式';
+    toWrap.hidden = !isT();
+    if (isT()) {
+      const all = getAccounts();
+      if (!all.some((a) => a.id === s.toId) || s.toId === s.accountId) s.toId = pickDefault(all, 'lastAcc.to', s.accountId);
+      toCar.setItems(accItems(all), s.toId);
+      s.toId = toCar.value() ? toCar.value().id : null;
+    }
+    renderAmount();
+  }
+
   /** 重畫類別輪播。selectId 沒給就維持目前選的類別。 */
   function renderCats(selectId = s.catId) {
+    catWrap.hidden = isT();
+    if (isT()) { s.catId = null; renderPlaceholder(); renderAmount(); return; }
     const items = catsOf(s.type).map((cat) => ({ id: cat.id, name: cat.name, color: catColor(cat, s.type), custom: !!cat.custom }));
     carousel.setItems(items, selectId);
     const v = carousel.value();
@@ -94,6 +152,7 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   /** 具體事項欄的提示：選了類別就顯示該類別的範例，例如「學習」→「例如：書本費」。 */
   function renderPlaceholder() {
     const cat = s.catId ? findCat(s.type, s.catId) : null;
+    if (isT()) { noteInput.placeholder = '備註（選填），例如：提款、繳卡費'; return; }
     noteInput.placeholder = cat && cat.example ? `具體事項，例如：${cat.example}` : '先選類別，再輸入具體事項';
   }
 
@@ -125,6 +184,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
     s.type = type;
     renderType();
     renderCats(null); // 支出與收入的類別不同，換類型就回到第一個類別
+    if (!s.editing) { s.accountId = null; s.toId = null; } // 換類型時改用該類型上次用的帳戶
+    renderAccounts();
   }
 
   function pressKey(k) {
@@ -151,23 +212,36 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
       shake(amountEl);
       return;
     }
-    if (!s.catId) {
+    if (!isT() && !s.catId) {
       toast('請滑到要用的類別（不是「新增類別」）');
       shake(grid);
       return;
     }
+    if (!s.accountId || (isT() && !s.toId)) {
+      toast(getAccounts().length ? '請滑到要用的帳戶（不是「新增帳戶」）' : '請先新增帳戶');
+      shake(accCar);
+      return;
+    }
+    if (isT() && s.toId === s.accountId) {
+      toast('轉出和轉入不能是同一個帳戶');
+      shake($('to-car'));
+      return;
+    }
     saving = true;
     const old = s.editing;
-    const entry = {
-      id: old ? old.id : newId(),
-      type: s.type,
-      catId: s.catId,
+    const entry = { id: old ? old.id : newId(), type: s.type };
+    if (isT()) Object.assign(entry, { fromId: s.accountId, toId: s.toId });
+    else Object.assign(entry, { catId: s.catId, accountId: s.accountId });
+    Object.assign(entry, {
       amount: Number(s.digits),
       date: s.dateKey > todayKey() ? todayKey() : s.dateKey,
       note: s.note.trim().slice(0, NOTE_MAX),
       createdAt: old ? old.createdAt : Date.now(),
-    };
+    });
     if (old) entry.updatedAt = Date.now();
+    // 記住這次用的帳戶，下次預設就是它
+    if (isT()) { setPref('lastAcc.from', s.accountId); setPref('lastAcc.to', s.toId); }
+    else setPref(`lastAcc.${s.type}`, s.accountId);
     try {
       await onSave(entry, !!old);
       sheet.close();
@@ -247,24 +321,28 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
   vv?.addEventListener('scroll', syncKeyboard);
 
   return {
-    isOpen: () => sheet.isOpen() || editor.isOpen(),
-    close: () => { editor.close(); sheet.close(); },
+    isOpen: () => sheet.isOpen() || editor.isOpen() || accEditor.isOpen(),
+    close: () => { editor.close(); accEditor.close(); sheet.close(); },
     /**
      * 新增：open({type})；編輯：open({entry})，欄位會預先填好。
-     * @param {{type?:'expense'|'income', entry?:object}} [opts]
+     * @param {{type?:'expense'|'income'|'transfer', entry?:object}} [opts]
      */
     open({ type = 'expense', entry = null } = {}) {
       s.editing = entry;
       if (entry) {
         s.type = entry.type;
         s.digits = String(entry.amount);
-        s.catId = entry.catId;
+        s.catId = entry.catId || null;
+        s.accountId = entry.type === 'transfer' ? entry.fromId : entry.accountId || null;
+        s.toId = entry.toId || null;
         s.note = entry.note || '';
         s.dateKey = entry.date;
       } else {
         s.type = type;
         s.digits = '';
         s.catId = null; // 重畫輪播時會停在第一個類別
+        s.accountId = null; // 重畫時用上次用的帳戶
+        s.toId = null;
         s.note = '';
         s.dateKey = todayKey();
       }
@@ -274,8 +352,11 @@ export function createEntrySheet({ onSave, onDelete, toast, newId }) {
       renderType();
       sheet.open(); // 先開視窗，輪播才量得到寬度
       renderCats(s.catId);
+      renderAccounts();
       renderDate();
     },
+    /** 帳戶有變動（在資產頁新增、改名）時更新輪播。 */
+    refreshAccounts() { if (sheet.isOpen()) renderAccounts(); },
     /** 深色／淺色模式切換時，更新類別圓點的顏色。 */
     refreshTheme() { if (sheet.isOpen()) renderCats(); editor.refreshTheme(); },
   };
