@@ -38,12 +38,8 @@ export function collapseOrbit(dir = 'in', ms = 360) {
   if (!loop || !current || !current.svg.isConnected) return Promise.resolve();
   if (collapse) collapse.done();
   settleFrom = dir;
-  if (dir === 'eclipse') {
-    // 日食：月亮從左邊滑進來遮住太陽，行星在陰影裡淡出
-    const sun = current.svg.querySelector('.sun-glow');
-    const moon = el('circle', { class: 'moon cover', cx: CX, cy: CY, r: 66, stroke: current.tint });
-    if (sun) sun.after(moon); else current.svg.appendChild(moon);
-  } else current.svg.querySelector('.orbits')?.classList.add('fading');
+  // 切換支出／收入（'eclipse'）：行星在原地淡出，不再有月亮滑過太陽
+  if (dir !== 'eclipse') current.svg.querySelector('.orbits')?.classList.add('fading');
   if (dir !== 'eclipse') current.svg.querySelector('.sun-glow')?.classList.add(dir === 'in' ? 'pulse' : 'dim');
   return new Promise((resolve) => {
     collapse = { t0: performance.now(), ms, dir, done: () => { collapse = null; resolve(); } };
@@ -121,10 +117,6 @@ export function renderOrbit(svg, data, opts) {
   const sun = el('circle', { class: `sun-glow${settleFrom ? ` settle-${settleFrom}` : ''}`, cx: CX, cy: CY, r: 84, fill: 'url(#sun-glow)' });
   settleFrom = null;
   svg.appendChild(sun);
-  if (from === 'eclipse') {
-    // 日食後半段：月亮從太陽前面往右滑開，露出換了顏色的太陽與新的行星
-    svg.appendChild(el('circle', { class: 'moon reveal', cx: CX, cy: CY, r: 66, stroke: tint }));
-  }
 
   const planets = layoutPlanets(data.segments);
 

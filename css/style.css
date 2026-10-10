@@ -675,12 +675,7 @@ html[data-cb] { --income: #946400; --expense: #1d608e; }
 .dp-cell.on .dp-dot { background: var(--bg); }
 .dp-today { align-self: center; margin-top: 12px; }
 
-/* 行星：日食（切換支出／收入） */
-.moon { fill: var(--bg); stroke-width: 2.5; stroke-opacity: 0.55; }
-.moon.cover { animation: moon-cover 0.38s cubic-bezier(0.4, 0, 0.2, 1) both; }
-.moon.reveal { animation: moon-reveal 0.62s cubic-bezier(0.4, 0, 0.2, 1) 0.05s both; }
-@keyframes moon-cover { from { transform: translateX(-240px); } to { transform: none; } }
-@keyframes moon-reveal { from { transform: none; } to { transform: translateX(240px); } }
+/* 行星：切換支出／收入 */
 
 /* 雙指縮放時，圓環／星系跟著手指即時縮放；放開後彈回 */
 .ring-wrap { transform: scale(var(--pinch, 1)); transition: transform 0.45s var(--ease); }

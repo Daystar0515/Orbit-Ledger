@@ -293,7 +293,7 @@ async function setLevel(level, anchor = null) {
   render({ from: dir });
 }
 
-/** 切換支出／收入。行星模式下是「日食」：月亮遮住太陽、太陽換色，再露出新的行星。 */
+/** 切換支出／收入。行星模式下：舊行星淡出、太陽換色，再讓新的行星飛出就位。 */
 let typeSeq = 0;
 async function setType(type) {
   if (type === state.type) return;
