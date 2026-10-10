@@ -95,3 +95,21 @@ test('圓環弧段由大到小，「其他」固定最後', () => {
   ]);
   assert.deepEqual(segments.map((s) => s.id), ['b', 'e', 'a', 'other']);
 });
+
+test('版本 4：備份帶著理財持有，匯入時整理並丟掉壞資料', () => {
+  const holds = [
+    { id: 'h1', kind: 'stock', code: '2330', name: '台積電', shares: 10.5, cost: 580, price: 600, priceAt: '2026-10-08T05:30:00.000Z', priceSrc: 'live', updatedAt: 5 },
+    { id: 'bad', kind: 'stock', shares: 0, cost: 1 },
+  ];
+  const text = buildBackup([], new Date('2026-10-10T00:00:00Z'), { expense: [], income: [] }, [], holds);
+  const data = JSON.parse(text);
+  assert.equal(data.version, 4);
+  assert.equal(data.holdings.length, 2);
+  const res = parseBackup(text, mk);
+  assert.equal(res.ok, true);
+  assert.equal(res.holdings.length, 1);
+  assert.equal(res.holdings[0].shares, 10.5);
+  // 舊版備份沒有 holdings 欄位
+  const old = parseBackup(JSON.stringify({ app: 'orbit', version: 3, entries: [] }), mk);
+  assert.deepEqual(old.holdings, []);
+});

@@ -2,7 +2,7 @@
 // 策略：有網路時一律抓最新檔案（並更新快取），沒網路時用快取。
 // 改了任何檔案後，把 CACHE 的名稱改掉（例如加上 -1），舊快取就會被清掉。
 
-const CACHE = 'orbit-1.0.0-1'; // 跟著 App 版本走；同一版本內改了檔案就加上 -1、-2…
+const CACHE = 'orbit-1.1.0'; // 跟著 App 版本走；同一版本內改了檔案就加上 -1、-2…
 const FILES = [
   './',
   'index.html',
@@ -36,6 +36,12 @@ const FILES = [
   'js/version.js',
   'js/ring.js',
   'js/gestures.js',
+  'js/config.js',
+  'js/holdings.js',
+  'js/quotes.js',
+  'js/asset-data.js',
+  'js/asset-rows.js',
+  'js/hold-editor.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',

@@ -4,9 +4,10 @@
 import { findCat } from './cats.js';
 import { fromKey, toKey } from './dateutil.js';
 import { cleanAdjust, adjustText } from './adjust.js';
+import { cleanHoldings } from './holdings.js';
 
 export const BACKUP_APP = 'orbit';
-export const BACKUP_VERSION = 3; // 2：多了自訂類別；3：多了帳戶與轉帳（讀得懂舊版備份）
+export const BACKUP_VERSION = 4; // 2：多了自訂類別；3：多了帳戶與轉帳；4：多了理財持有（讀得懂舊版備份）
 export const MAX_AMOUNT = 99999999;
 export const NOTE_MAX = 40;
 const MAX_FILE_CHARS = 20 * 1024 * 1024; // 超過 20MB 的字串不是正常的備份
@@ -39,13 +40,13 @@ function cleanEntry(e) {
 }
 
 /** 做出備份檔的文字內容（JSON）。示範資料不會在 entries 裡，所以不會被備份。 */
-export function buildBackup(entries, now = new Date(), categories = { expense: [], income: [] }, accounts = []) {
+export function buildBackup(entries, now = new Date(), categories = { expense: [], income: [] }, accounts = [], holdings = []) {
   const list = entries
     .filter((e) => !e.demo)
     .map(cleanEntry)
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
   return JSON.stringify(
-    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, categories, accounts, entries: list },
+    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), count: list.length, categories, accounts, holdings, entries: list },
     null,
     1,
   );
@@ -120,7 +121,8 @@ export function parseBackup(text, makeId) {
   const c = data.categories && typeof data.categories === 'object' ? data.categories : {};
   const categories = { expense: Array.isArray(c.expense) ? c.expense : [], income: Array.isArray(c.income) ? c.income : [] };
   const accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  return { ok: true, entries, skipped, categories, accounts, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
+  const holdings = cleanHoldings(data.holdings);
+  return { ok: true, entries, skipped, categories, accounts, holdings, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
 }
 
 const sameAdj = (a, b) => JSON.stringify(a.adjust || []) === JSON.stringify(b.adjust || []);

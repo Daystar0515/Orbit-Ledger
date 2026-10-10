@@ -7,7 +7,12 @@ import { totalsByCategory } from './stats.js';
 import { buildSegments, renderRing, percentText } from './ring.js';
 import { renderOrbit, stopOrbit, collapseOrbit } from './orbit.js';
 import { createDatePicker } from './date-picker.js';
-import { loadAccounts, getAccounts, onAccountsChange, mergeAccounts } from './accounts.js';
+import { loadAccounts, getAccounts, onAccountsChange, mergeAccounts, balances } from './accounts.js';
+import { loadHoldings, getHoldings, onHoldingsChange, mergeHoldings, findHolding } from './holdings.js';
+import { refreshPrices } from './quotes.js';
+import { assetSummary, pnlTag } from './asset-data.js';
+import { assetListRows, money as assetMoney } from './asset-rows.js';
+import { createHoldEditor } from './hold-editor.js';
 import { dueReminders, reminderText } from './reminders.js';
 import { createAccEditor } from './acc-editor.js';
 import { createAssetSheet } from './asset-sheet.js';
@@ -25,7 +30,8 @@ const $ = (id) => document.getElementById(id);
 const nf = new Intl.NumberFormat('zh-TW');
 const money = (n) => `NT$ ${nf.format(n)}`;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const TYPE_NAMES = { expense: '支出', income: '收入' };
+const TYPE_NAMES = { expense: '支出', income: '收入', asset: '資產' };
+const UNIVERSES = ['expense', 'income', 'asset']; // 上下滑依序切換的三個宇宙
 
 const state = {
   level: 'day',
@@ -46,6 +52,7 @@ function applyColorBlind() {
 applyColorBlind();
 
 const els = {
+  app: $('app'),
   kicker: $('kicker'),
   period: $('period'),
   periodBtn: $('period-btn'),
@@ -116,6 +123,15 @@ function entriesFor(level, start, today) {
 
 /** 頂部標題與層級圓點（切換層級時要先更新，不必等行星動畫）。 */
 function renderHeader() {
+  els.app.dataset.universe = state.type;
+  if (state.type === 'asset') {
+    // 資產宇宙只看「現在」：沒有日期與層級可以切換
+    els.kicker.textContent = '資產宇宙';
+    els.period.textContent = '現在';
+    els.periodBtn.disabled = true;
+    return;
+  }
+  els.periodBtn.disabled = false;
   const today = new Date();
   const start = startOfPeriod(state.anchor, state.level);
   els.kicker.textContent = `${LEVEL_NAMES[state.level]}檢視`;
@@ -127,8 +143,67 @@ function renderHeader() {
   });
 }
 
-/** @param {{grow?:boolean, from?:'in'|'out'}} [opts] from：行星從太陽（in）或從外圍（out）飛回軌道 */
-function render({ grow = true, from = 'in' } = {}) {
+/** 支出／收入切換鈕的亮燈狀態。 */
+function syncTypeSwitch() {
+  els.typeSwitch.querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.type === state.type;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  els.fab.setAttribute('aria-label', state.type === 'asset' ? '新增持有' : '新增帳目');
+}
+
+/** @param {{grow?:boolean, from?:'in'|'out'|'eclipse'}} [opts] from：行星從太陽（in）或從外圍（out）飛回軌道 */
+function render(opts = {}) {
+  if (state.type === 'asset') renderAsset(opts); else renderFlow(opts);
+}
+
+/** 資產宇宙：太陽是淨資產，行星是現金、存款與每一筆理財持有；明細列出全部帳戶與持有。 */
+function renderAsset({ grow = true, from = 'in' } = {}) {
+  const today = new Date();
+  const sum = assetSummary(getAccounts(), balances(getAccounts(), state.entries, toKey(today)), getHoldings());
+  const data = buildSegments(sum.items);
+  data.segments.forEach((s) => { s.pnl = s.rate === null || s.rate === undefined ? null : pnlTag(s.rate); });
+  if (state.selectedId && !data.segments.some((s) => s.id === state.selectedId)) state.selectedId = null;
+  const selected = data.segments.find((s) => s.id === state.selectedId) || null;
+
+  renderHeader();
+  els.demoTag.hidden = true;
+  syncTypeSwitch();
+
+  const ringOpts = { selectedId: state.selectedId, animate: grow && !reduceMotion, formatMoney: money };
+  els.ringWrap.dataset.view = state.view;
+  if (state.view === 'orbit') {
+    const tint = getComputedStyle(document.documentElement).getPropertyValue('--asset').trim();
+    renderOrbit(els.ring, data, { ...ringOpts, tint, from, reduce: reduceMotion, isPaused: anySheetOpen, dashed: true });
+  } else {
+    stopOrbit();
+    renderRing(els.ring, data, ringOpts);
+  }
+  if (selected) {
+    els.caption.textContent = selected.name;
+    setAmount(selected.amount);
+    els.sub.textContent = `占資產 ${percentText(selected.fraction)}${selected.pnl ? `・${selected.pnl.text}` : ''}`;
+  } else {
+    els.caption.textContent = '淨資產';
+    setAmount(sum.net);
+    els.sub.textContent = sum.rows.length === 0 ? '點下方「＋」新增持有'
+      : sum.credit > 0 ? `已扣掉信用卡欠款 ${money(sum.credit)}`
+      : data.total <= 0 ? '目前沒有現金、存款或理財' : '';
+  }
+  els.ring.setAttribute('aria-label', `資產宇宙，${els.caption.textContent} ${assetMoney(selected ? selected.amount : sum.net)}`);
+
+  els.list.replaceChildren(...assetListRows(sum.rows, state.selectedId, today));
+  if (sum.rows.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '還沒有資產，到右下角資產頁新增帳戶，或點「＋」新增股票、ETF、基金';
+    els.list.appendChild(li);
+  }
+}
+
+/** 支出／收入宇宙（以日期期間為單位）。 */
+function renderFlow({ grow = true, from = 'in' } = {}) {
   const today = new Date();
   const start = startOfPeriod(state.anchor, state.level);
   const entries = entriesFor(state.level, start, today);
@@ -142,11 +217,7 @@ function render({ grow = true, from = 'in' } = {}) {
   els.demoTag.hidden = !state.showDemo;
 
   // 支出／收入切換
-  els.typeSwitch.querySelectorAll('button').forEach((b) => {
-    const on = b.dataset.type === state.type;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
+  syncTypeSwitch();
 
   // 圓環與中央文字
   const ringOpts = { selectedId: state.selectedId, animate: grow && !reduceMotion, formatMoney: money };
@@ -302,6 +373,7 @@ async function setType(type) {
   state.selectedId = null;
   playAnim(null);
   els.typeSwitch.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.type === type));
+  renderHeader(); // 資產宇宙沒有日期，頂部要立刻跟著換
   if (state.view === 'orbit' && !reduceMotion) {
     await collapseOrbit('eclipse', 380);
     if (seq !== typeSeq) return;
@@ -309,16 +381,20 @@ async function setType(type) {
   } else render();
 }
 
-const toggleType = () => setType(state.type === 'expense' ? 'income' : 'expense');
+/** 往下一個（n=1）或上一個（n=-1）宇宙：支出 → 收入 → 資產 → 支出…… */
+const cycleType = (n) => setType(UNIVERSES[(UNIVERSES.indexOf(state.type) + n + UNIVERSES.length) % UNIVERSES.length]);
 
 attachGestures(els.ringZone, {
   onSwipe(dir) {
-    if (dir === 'right') go(-1); // 向右滑：往過去
-    else if (dir === 'left') go(1); // 向左滑：往較近
-    else toggleType(); // 上下滑：切換支出／收入圓環
+    if (dir === 'up') cycleType(1); // 上滑：下一個宇宙（支出 → 收入 → 資產）
+    else if (dir === 'down') cycleType(-1); // 下滑：上一個宇宙
+    else if (state.type === 'asset') playAnim('anim-bump'); // 資產宇宙只看現在，沒有前後
+    else if (dir === 'right') go(-1); // 向右滑：往過去
+    else go(1); // 向左滑：往較近
   },
   // 雙指縮放即時跟手：圓環／星系跟著手指縮放，放開時超過門檻才換層級，否則彈回原狀
   onPinchMove(ratio) {
+    if (state.type === 'asset') return; // 資產宇宙沒有日週月年
     const r = Math.max(0.55, Math.min(1.5, ratio));
     els.ringWrap.classList.add('pinching');
     els.ringWrap.style.setProperty('--pinch', String(1 + (r - 1) * 0.6));
@@ -326,6 +402,7 @@ attachGestures(els.ringZone, {
   onPinchEnd(ratio) {
     els.ringWrap.classList.remove('pinching');
     els.ringWrap.style.removeProperty('--pinch'); // 用 CSS transition 彈回
+    if (state.type === 'asset') return;
     if (ratio < PINCH_THRESHOLDS.in) {
       const next = levelUp(state.level); // 縮小：日→週→月→年
       if (next === state.level) playAnim('anim-bump'); else setLevel(next);
@@ -338,6 +415,7 @@ attachGestures(els.ringZone, {
 
 attachGestures(els.dotsZone, {
   onSwipe(dir) {
+    if (state.type === 'asset') return;
     // 比照 iOS 主畫面圓點：向左滑到下一頁，向右滑回上一頁
     if (dir === 'left') setLevel(levelUp(state.level));
     else if (dir === 'right') setLevel(levelDown(state.level));
@@ -345,6 +423,7 @@ attachGestures(els.dotsZone, {
 });
 
 els.dotsZone.addEventListener('click', (e) => {
+  if (state.type === 'asset') return;
   const b = e.target.closest('button[data-level]');
   if (b) setLevel(b.dataset.level);
 });
@@ -377,13 +456,13 @@ window.addEventListener('keydown', (e) => {
   if (anySheetOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.tagName === 'INPUT') return;
   switch (e.key) {
-    case 'ArrowLeft': go(-1); break;
-    case 'ArrowRight': go(1); break;
-    case 'ArrowUp':
-    case 'ArrowDown': toggleType(); break;
-    case '-': setLevel(levelUp(state.level)); break;
+    case 'ArrowLeft': if (state.type !== 'asset') go(-1); break;
+    case 'ArrowRight': if (state.type !== 'asset') go(1); break;
+    case 'ArrowUp': cycleType(1); break;
+    case 'ArrowDown': cycleType(-1); break;
+    case '-': if (state.type !== 'asset') setLevel(levelUp(state.level)); break;
     case '+':
-    case '=': setLevel(levelDown(state.level)); break;
+    case '=': if (state.type !== 'asset') setLevel(levelDown(state.level)); break;
     default: return;
   }
   e.preventDefault();
@@ -465,7 +544,7 @@ const datePicker = createDatePicker({
     setLevel(level, date); // 可以選未來的日期（查看或預先記帳）
   },
 });
-els.periodBtn.addEventListener('click', () => datePicker.open());
+els.periodBtn.addEventListener('click', () => { if (state.type !== 'asset') datePicker.open(); });
 
 const settings = createSettings({
   getDemo: () => state.showDemo,
@@ -492,6 +571,7 @@ const settings = createSettings({
   getEntries: () => state.entries,
   getCategories: () => getCustom(),
   getAccounts: () => getAccounts(),
+  getHoldings: () => getHoldings(),
   toast,
   newId: db.newId,
   async applyImport(plan) {
@@ -499,6 +579,7 @@ const settings = createSettings({
     await db.putMany(rows); // 同一個交易：全部成功或全部不動
     if (plan.cats) mergeCustom(plan.cats); // 備份裡的自訂類別（已存在的不會重複）
     if (plan.accounts) mergeAccounts(plan.accounts); // 備份裡的帳戶（已存在的不會重複）
+    if (plan.holdings) mergeHoldings(plan.holdings); // 備份裡的理財持有（新的加入，較新的更新）
     const byId = new Map(state.entries.map((x) => [x.id, x]));
     rows.forEach((x) => byId.set(x.id, x));
     state.entries = [...byId.values()];
@@ -509,17 +590,35 @@ const settings = createSettings({
   },
 });
 
-const assetSheet = createAssetSheet({ getEntries: () => state.entries, editor: accEditor });
+const holdEditor = createHoldEditor({ toast });
+const assetSheet = createAssetSheet({ getEntries: () => state.entries, editor: accEditor, holdEditor, toast });
 const searchSheet = createSearchSheet({
   getViews: () => state.entries.map(toView).filter(Boolean),
   getAnchor: () => state.anchor,
   getLevel: () => state.level,
 });
 
-els.fab.addEventListener('click', () => entrySheet.open({ type: state.type }));
+els.fab.addEventListener('click', () => {
+  if (state.type === 'asset') holdEditor.open({}); // 資產宇宙裡的「＋」是新增持有
+  else entrySheet.open({ type: state.type });
+});
 $('asset-btn').addEventListener('click', () => assetSheet.open());
 $('search-btn').addEventListener('click', () => searchSheet.open());
 els.gear.addEventListener('click', () => settings.open());
+
+// 資產宇宙的明細：點一列就編輯那個帳戶或持有
+els.list.addEventListener('click', (e) => {
+  if (state.type !== 'asset') return;
+  const row = e.target.closest('.a-row');
+  if (!row) return;
+  if (row.dataset.hid) {
+    const h = findHolding(row.dataset.hid);
+    if (h) holdEditor.open({ holding: h });
+  } else if (row.dataset.aid) {
+    const acc = getAccounts().find((a) => a.id === row.dataset.aid);
+    if (acc) accEditor.open({ acc });
+  }
+});
 
 onThemeChange(() => {
   render({ grow: false });
@@ -547,6 +646,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     render({ grow: false });
     checkReminders();
+    refreshPrices();
   }
 });
 
@@ -564,6 +664,13 @@ onAccountsChange((accs) => {
   assetSheet.refresh();
 });
 
+// 持有有變動（新增、編輯、刪除，或自動更新了市價）就存起來
+onHoldingsChange(() => {
+  db.setMeta('holdings', getHoldings()).catch(() => toast('理財持有沒有存成功，請再試一次'));
+  if (state.type === 'asset') render({ grow: false });
+  assetSheet.refresh();
+});
+
 // ---- 啟動 ----
 
 async function boot() {
@@ -572,6 +679,7 @@ async function boot() {
     loadCustom(await db.getMeta('cats'));
     const accData = await db.getMeta('accounts');
     if (loadAccounts(accData)) await db.setMeta('accounts', getAccounts()); // 第一次使用：存下預設帳戶
+    loadHoldings(await db.getMeta('holdings'));
     state.entries = await db.getAll();
   } catch (e) {
     toast('讀取帳目時發生問題，請重新開啟 Orbit', 4000);
@@ -579,6 +687,7 @@ async function boot() {
   render();
   if (db.mode === 'memory') toast('這個瀏覽器無法保存資料，關閉後帳目會消失', 5000);
   else setTimeout(checkReminders, 1200); // 等行星飛出來再提醒
+  refreshPrices(); // 有股票或 ETF 時，在背景更新市價（失敗就維持上次的價格）
 }
 boot();
 

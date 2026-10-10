@@ -37,6 +37,7 @@
       <div class="type-switch" id="type-switch" role="group" aria-label="圓環類型">
         <button type="button" data-type="expense">支出</button>
         <button type="button" data-type="income">收入</button>
+        <button type="button" data-type="asset">資產</button>
       </div>
     </header>
 
@@ -202,7 +203,7 @@
     </div>
     <div class="asset-body">
       <div class="net">
-        <div class="net-label">淨資產（現金＋存款－信用卡欠款）</div>
+        <div class="net-label">淨資產（現金＋存款＋理財市值－信用卡欠款）</div>
         <div class="net-amt" id="net-amt"></div>
       </div>
       <div id="asset-groups"></div>
@@ -287,6 +288,44 @@
         <button type="button" class="save" id="acc-save">加入</button>
       </div>
       <p class="set-sub" id="acc-note"></p>
+    </div>
+  </section>
+
+  <!-- 新增／編輯理財持有（疊在資產頁上面） -->
+  <section class="sheet stack" id="hold-sheet" role="dialog" aria-modal="true" aria-label="新增持有" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <span class="head-title" id="hold-title">新增持有</span>
+        <span class="head-spacer"></span>
+      </div>
+    </div>
+    <div class="set-list">
+      <div class="type-switch acc-kinds" id="hold-kinds" role="group" aria-label="持有類型">
+        <button type="button" data-kind="stock">股票</button>
+        <button type="button" data-kind="etf">ETF</button>
+        <button type="button" data-kind="fund">基金</button>
+      </div>
+      <label class="field-label" for="hold-code" id="hold-code-label">代碼</label>
+      <div class="code-row">
+        <input type="text" class="note-input" id="hold-code" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next">
+        <button type="button" class="pill-btn" id="hold-lookup">查詢市價</button>
+      </div>
+      <label class="field-label" for="hold-name">名稱（最多 16 個字）</label>
+      <input type="text" class="note-input" id="hold-name" maxlength="16" autocomplete="off" enterkeyhint="next">
+      <label class="field-label" for="hold-shares" id="hold-shares-label">持有股數</label>
+      <input type="text" class="note-input" id="hold-shares" inputmode="decimal" maxlength="14" autocomplete="off">
+      <label class="field-label" for="hold-cost" id="hold-cost-label">平均成本（每股）</label>
+      <input type="text" class="note-input" id="hold-cost" inputmode="decimal" maxlength="14" autocomplete="off" placeholder="例如：580.5">
+      <label class="field-label" for="hold-price" id="hold-price-label">目前市價（每股）</label>
+      <input type="text" class="note-input" id="hold-price" inputmode="decimal" maxlength="14" autocomplete="off" placeholder="可以留白">
+      <p class="set-sub" id="hold-price-note"></p>
+      <div class="actions">
+        <button type="button" class="del-btn" id="hold-delete" hidden>刪除</button>
+        <button type="button" class="save" id="hold-save">加入</button>
+      </div>
+      <p class="set-sub" id="hold-note"></p>
     </div>
   </section>
 
@@ -393,7 +432,7 @@
         </div>
         <input type="file" id="import-file" class="file-hidden" accept=".json,application/json" tabindex="-1" aria-hidden="true">
       </div>
-      <p class="set-foot" id="app-version">Orbit · Version 1.0.0</p>
+      <p class="set-foot" id="app-version">Orbit · Version 1.1.0</p>
     </div>
   </section>
 

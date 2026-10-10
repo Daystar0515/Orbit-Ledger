@@ -85,7 +85,7 @@ function* stars(seed = 7) {
  * @param {{tint:string, reduce:boolean, isPaused:()=>boolean}} opts
  */
 export function renderOrbit(svg, data, opts) {
-  const { selectedId, animate, formatMoney, tint, reduce, isPaused, from = 'in' } = opts;
+  const { selectedId, animate, formatMoney, tint, reduce, isPaused, from = 'in', dashed = false } = opts;
   stopOrbit();
   svg.replaceChildren();
 
@@ -124,8 +124,9 @@ export function renderOrbit(svg, data, opts) {
   const orbits = el('g', { class: 'orbits', transform: `rotate(-90 ${CX} ${CY})` });
   const orbitRadii = planets.length ? planets.map((p) => p.r) : [R_IN, (R_IN + R_OUT) / 2, R_OUT];
   orbitRadii.forEach((r, i) => {
-    const c = el('circle', { class: `orbit-line${animate ? ' draw' : ''}`, cx: CX, cy: CY, r, fill: 'none', pathLength: 100, 'stroke-dasharray': 100, 'stroke-dashoffset': 0 });
-    if (animate) c.style.animationDelay = `${i * STAGGER_MS}ms`;
+    // 資產宇宙的軌道是虛線（不靠顏色也分得出是哪個宇宙），虛線不做「畫出來」的動畫
+    const c = el('circle', { class: `orbit-line${dashed ? ' dashed' : animate ? ' draw' : ''}`, cx: CX, cy: CY, r, fill: 'none', pathLength: 100, 'stroke-dasharray': dashed ? '0.7 1.3' : 100, 'stroke-dashoffset': 0 });
+    if (animate && !dashed) c.style.animationDelay = `${i * STAGGER_MS}ms`;
     orbits.appendChild(c);
   });
   svg.appendChild(orbits);
@@ -141,7 +142,7 @@ export function renderOrbit(svg, data, opts) {
       'data-id': seg.id,
       tabindex: 0,
       role: 'button',
-      'aria-label': `${seg.name} ${percentText(seg.fraction)}，${formatMoney(seg.amount)}`,
+      'aria-label': `${seg.name} ${percentText(seg.fraction)}，${formatMoney(seg.amount)}${seg.pnl ? `，${seg.pnl.text}` : ''}`,
     });
     const body = el('g', { class: 'planet-body' });
     body.append(
@@ -149,12 +150,14 @@ export function renderOrbit(svg, data, opts) {
       el('circle', { r: p.size, fill: seg.color }),
       el('circle', { r: p.size, fill: 'url(#planet-shade)', 'pointer-events': 'none' }),
     );
-    if (selectedId === seg.id) body.appendChild(el('circle', { class: 'halo', r: p.size + 5, fill: 'none', stroke: seg.color }));
+    // 資產宇宙的盈虧光環：賺（綠）賠（紅），報酬率越大越亮
+    if (seg.pnl) body.appendChild(el('circle', { class: `pnl pnl-${seg.pnl.tone}`, r: p.size + 3.5, fill: 'none', 'stroke-opacity': (0.3 + 0.7 * seg.pnl.strength).toFixed(2), 'pointer-events': 'none' }));
+    if (selectedId === seg.id) body.appendChild(el('circle', { class: 'halo', r: p.size + (seg.pnl ? 8 : 5), fill: 'none', stroke: seg.color }));
     g.appendChild(body);
     let label = null;
     if (seg.fraction >= LABEL_MIN || selectedId === seg.id) {
-      label = el('text', { class: 'pct', y: -(p.size + 9), 'text-anchor': 'middle', 'dominant-baseline': 'auto' });
-      label.textContent = percentText(seg.fraction);
+      label = el('text', { class: seg.pnl ? `pct tag-${seg.pnl.tone}` : 'pct', y: -(p.size + (seg.pnl ? 12 : 9)), 'text-anchor': 'middle', 'dominant-baseline': 'auto' });
+      label.textContent = seg.pnl ? seg.pnl.text : percentText(seg.fraction);
       g.appendChild(label);
     }
     layer.appendChild(g);
