@@ -797,3 +797,10 @@ html[data-cb] { --income: #946400; --expense: #1d608e; }
   .acc-car .car-card { min-height: 36px; }
   .car-card { min-height: 42px; }
 }
+
+/* 帳戶卡片：名稱與類型小字都置中，長名稱用省略號，各張卡片對齊一致 */
+.acc-car .car-card { padding: 0 10px; }
+.acc-car .car-text { align-items: center; width: 100%; text-align: center; }
+.acc-car .car-name, .acc-car .car-sub { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.acc-car .car-sub { margin-top: 2px; font-size: 11px; letter-spacing: 0.08em; }
+.view-switch button { padding: 5px 12px; }
