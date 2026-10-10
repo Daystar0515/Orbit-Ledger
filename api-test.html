@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbit 報價連線測試</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f4f5f8; --fg:#14161c; --card:#fff; --mut:#6b7280; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b0d14; --fg:#e8eaf0; --card:#161925; --mut:#9aa1b2; } }
+  body { margin:0; padding:max(16px, env(safe-area-inset-top)) 16px 40px; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "PingFang TC", sans-serif; }
+  h1 { font-size:20px; margin:8px 0 4px; }
+  p.sub { color:var(--mut); margin:0 0 16px; font-size:13px; }
+  button { font:inherit; padding:12px 18px; border:0; border-radius:12px; background:#5b6cff; color:#fff; width:100%; margin-bottom:16px; }
+  .card { background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+  .name { font-weight:600; }
+  .url { color:var(--mut); font-size:11px; word-break:break-all; }
+  .res { margin-top:6px; font-size:14px; white-space:pre-wrap; word-break:break-all; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  pre { background:rgba(127,127,127,.12); padding:8px; border-radius:8px; font-size:11px; overflow:auto; margin:6px 0 0; white-space:pre-wrap; word-break:break-all; }
+</style>
+</head>
+<body>
+<h1>Orbit 報價連線測試</h1>
+<p class="sub">測試這支手機的瀏覽器能不能直接讀取各個報價來源。按下按鈕，等幾秒，把整個畫面截圖給 Claude 即可。</p>
+<button id="go">開始測試</button>
+<div id="out"></div>
+<script>
+const TESTS = [
+  { name: '證交所 OpenAPI：上市股票每日收盤', url: 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL', codes: ['2330', '0050', '00878'], keys: ['Code'] },
+  { name: '櫃買中心 OpenAPI：上櫃每日收盤', url: 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', codes: ['6488', '5347'], keys: ['SecuritiesCompanyCode'] },
+  { name: '證交所 OpenAPI：個股本益比等（備用）', url: 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL', codes: ['2330'], keys: ['Code'] },
+  { name: '證交所 盤中即時（mis）', url: 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0', codes: [], keys: [] },
+  { name: 'Yahoo 財經 chart（非官方）', url: 'https://query1.finance.yahoo.com/v8/finance/chart/2330.TW?range=5d&interval=1d', codes: [], keys: [] },
+];
+
+const out = document.getElementById('out');
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function card(t) {
+  const d = document.createElement('div');
+  d.className = 'card';
+  d.innerHTML = `<div class="name">${esc(t.name)}</div><div class="url">${esc(t.url)}</div><div class="res">測試中…</div>`;
+  out.appendChild(d);
+  return d.querySelector('.res');
+}
+
+async function run(t, res) {
+  const t0 = performance.now();
+  const ms = () => Math.round(performance.now() - t0);
+  let r;
+  try {
+    r = await fetch(t.url, { mode: 'cors', cache: 'no-store' });
+  } catch (err) {
+    // 區分「被 CORS 擋」與「連網路都不通」
+    let reach = false;
+    try { await fetch(t.url, { mode: 'no-cors', cache: 'no-store' }); reach = true; } catch (e2) { /* 不通 */ }
+    res.innerHTML = reach
+      ? `<span class="bad">✗ 被瀏覽器擋住（CORS）</span>\n伺服器有回應，但沒有允許網頁直接讀取。（${ms()} ms）`
+      : `<span class="bad">✗ 連不上</span>\n網路不通、網址失效或被封鎖。（${ms()} ms）`;
+    return;
+  }
+  const head = `HTTP ${r.status}・${ms()} ms`;
+  let text;
+  try { text = await r.text(); } catch (e) { res.innerHTML = `<span class="warn">? 讀取內容失敗</span>\n${head}`; return; }
+  let data;
+  try { data = JSON.parse(text); } catch (e) {
+    res.innerHTML = `<span class="warn">△ 可以讀取，但不是 JSON</span>\n${head}・${text.length} 字元<pre>${esc(text.slice(0, 200))}</pre>`;
+    return;
+  }
+  let msg = `<span class="ok">✓ 可以直接讀取</span>\n${head}・${(text.length / 1024).toFixed(0)} KB`;
+  if (Array.isArray(data)) {
+    msg += `・${data.length} 筆`;
+    const key = t.keys.find((k) => data[0] && k in data[0]);
+    if (key) {
+      for (const c of t.codes) {
+        const row = data.find((x) => String(x[key]).trim() === c);
+        msg += row ? `\n<b>${c}</b>：${esc(JSON.stringify(row))}` : `\n${c}：找不到`;
+      }
+    } else if (data[0]) {
+      msg += `\n欄位：${esc(Object.keys(data[0]).join(', '))}`;
+    }
+  } else {
+    msg += `<pre>${esc(JSON.stringify(data).slice(0, 400))}</pre>`;
+  }
+  res.innerHTML = msg;
+}
+
+document.getElementById('go').addEventListener('click', async () => {
+  out.replaceChildren();
+  const rows = TESTS.map((t) => [t, card(t)]);
+  await Promise.all(rows.map(([t, res]) => run(t, res)));
+  const time = document.createElement('p');
+  time.className = 'sub';
+  time.textContent = `測試時間：${new Date().toLocaleString('zh-TW')}`;
+  out.appendChild(time);
+});
+</script>
+</body>
+</html>
