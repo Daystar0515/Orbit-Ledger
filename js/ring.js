@@ -54,8 +54,12 @@ function el(name, attrs = {}) {
   return node;
 }
 
+export const SWEEP_MS = 900; // 圓環從 12 點鐘方向順時針填滿所需的時間
+
 /**
  * 重畫圓環。
+ * 弧段由大到小、從正上方（12 點鐘）開始順時針排列；animate 時，用一個遮罩
+ * 從同一個起點順時針掃過一圈，所以最大的類別先出現，最小的（或「其他」）最後出現。
  * @param {SVGElement} svg
  * @param {{total:number, segments:object[]}} data buildSegments 的結果
  * @param {{selectedId:string|null, animate:boolean, formatMoney:(n:number)=>string}} opts
@@ -67,11 +71,28 @@ export function renderRing(svg, data, opts) {
   svg.appendChild(el('circle', { class: 'track', cx: CX, cy: CY, r: R, fill: 'none', 'stroke-width': SW }));
   if (data.total <= 0) return;
 
-  const g = el('g', { transform: `rotate(-90 ${CX} ${CY})` });
+  // 遮罩畫在旋轉後的座標裡：圓的路徑從 3 點鐘順時針走，旋轉 -90° 後就是從 12 點鐘開始。
+  const defs = el('defs');
+  const mask = el('mask', { id: 'ring-sweep', maskUnits: 'userSpaceOnUse', x: -40, y: -40, width: 360, height: 360 });
+  mask.appendChild(el('circle', {
+    class: `sweep${animate ? ' play' : ''}`,
+    cx: CX,
+    cy: CY,
+    r: R,
+    fill: 'none',
+    stroke: '#fff',
+    'stroke-width': SW + 12,
+    pathLength: 100,
+    'stroke-dasharray': 100,
+    'stroke-dashoffset': 0,
+  }));
+  defs.appendChild(mask);
+  svg.appendChild(defs);
+
+  const g = el('g', { transform: `rotate(-90 ${CX} ${CY})`, mask: 'url(#ring-sweep)' });
   const labels = el('g', { class: 'labels' });
   const multiple = data.segments.length > 1;
   let acc = 0;
-  const arcs = [];
 
   data.segments.forEach((seg) => {
     const len = seg.fraction * C;
@@ -86,14 +107,12 @@ export function renderRing(svg, data, opts) {
       fill: 'none',
       stroke: seg.color,
       'stroke-width': SW,
+      'stroke-dasharray': `${dash} ${C - dash}`,
       'stroke-dashoffset': -(acc + gap / 2),
       tabindex: 0,
       role: 'button',
       'aria-label': `${seg.name} ${percentText(seg.fraction)}，${formatMoney(seg.amount)}`,
     });
-    const finalDash = `${dash} ${C - dash}`;
-    circle.setAttribute('stroke-dasharray', animate ? `0 ${C}` : finalDash);
-    arcs.push([circle, finalDash]);
     g.appendChild(circle);
 
     if (seg.fraction >= LABEL_MIN) {
@@ -101,12 +120,14 @@ export function renderRing(svg, data, opts) {
       const angle = (mid / C) * 2 * Math.PI - Math.PI / 2;
       const rr = R + SW / 2 + 16;
       const text = el('text', {
-        class: `pct${selectedId && selectedId !== seg.id ? ' dim' : ''}`,
+        class: `pct${selectedId && selectedId !== seg.id ? ' dim' : ''}${animate ? ' pct-in' : ''}`,
         x: CX + rr * Math.cos(angle),
         y: CY + rr * Math.sin(angle),
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
       });
+      // 百分比等掃過自己的弧段中點才浮現（掃描是等速的，所以延遲 = 位置 × 總時間）。
+      if (animate) text.style.animationDelay = `${Math.round((mid / C) * SWEEP_MS)}ms`;
       text.textContent = percentText(seg.fraction);
       labels.appendChild(text);
     }
@@ -115,11 +136,4 @@ export function renderRing(svg, data, opts) {
 
   svg.appendChild(g);
   svg.appendChild(labels);
-
-  if (animate) {
-    // 下一個畫面幀再設定最終長度，CSS 的 transition 就會播出弧段展開的動畫。
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => arcs.forEach(([c, d]) => c.setAttribute('stroke-dasharray', d)));
-    });
-  }
 }

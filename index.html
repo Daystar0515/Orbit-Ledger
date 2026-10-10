@@ -19,7 +19,12 @@
 </head>
 <body>
   <main id="app">
-    <span class="demo-tag">示範資料</span>
+    <button type="button" class="icon-btn gear" id="gear" aria-label="設定">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>
+      </svg>
+    </button>
+    <span class="demo-tag" id="demo-tag" hidden>示範資料</span>
 
     <header class="top">
       <div class="kicker" id="kicker"></div>
@@ -55,6 +60,112 @@
     <button type="button" class="fab" id="fab" aria-label="新增帳目"></button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </main>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- 新增帳目 -->
+  <section class="sheet" id="entry-sheet" role="dialog" aria-modal="true" aria-label="新增帳目" tabindex="-1" data-type="expense">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="關閉">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="type-switch" id="sheet-type" role="group" aria-label="收支類型">
+          <button type="button" data-type="expense">支出</button>
+          <button type="button" data-type="income">收入</button>
+        </div>
+        <div class="date-ctl">
+          <button type="button" class="step" id="date-prev" aria-label="前一天">‹</button>
+          <label class="date-label">
+            <span id="date-text">今天</span>
+            <input type="date" id="date-input" aria-label="選擇日期">
+          </label>
+          <button type="button" class="step" id="date-next" aria-label="後一天">›</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="amount-line empty" id="sheet-amount" aria-live="polite">
+      <span class="cur">NT$</span><span id="amount-text">0</span>
+    </div>
+
+    <div class="cat-wrap">
+      <div class="cat-grid cols3" id="cat-grid" role="radiogroup" aria-label="類別"></div>
+    </div>
+
+    <div class="item-row">
+      <input type="text" class="note-input" id="note-input" maxlength="40" placeholder="先選類別，再輸入具體事項" enterkeyhint="done" autocomplete="off" aria-label="具體事項">
+    </div>
+
+    <div class="keypad" id="keypad">
+      <button type="button" data-k="1">1</button>
+      <button type="button" data-k="2">2</button>
+      <button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button>
+      <button type="button" data-k="5">5</button>
+      <button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button>
+      <button type="button" data-k="8">8</button>
+      <button type="button" data-k="9">9</button>
+      <button type="button" data-k="00">00</button>
+      <button type="button" data-k="0">0</button>
+      <button type="button" data-k="back" aria-label="刪除">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-6-6z"/><path d="M12.5 10.5l4 4M16.5 10.5l-4 4"/></svg>
+      </button>
+    </div>
+    <div class="actions">
+      <button type="button" class="del-btn" id="sheet-delete" hidden>刪除</button>
+      <button type="button" class="save is-off" id="sheet-save">儲存</button>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-label="設定" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <span class="head-spacer"></span>
+        <span class="head-title">設定</span>
+        <button type="button" class="icon-btn" data-close aria-label="關閉">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="set-list">
+      <div class="set-row">
+        <div class="set-text">
+          <div class="set-title">顯示示範資料</div>
+          <div class="set-sub">加上假帳目，方便試看圓環與手勢。不會存進你的帳本，隨時可以關掉。</div>
+        </div>
+        <button type="button" class="switch" id="demo-switch" role="switch" aria-checked="false" aria-label="顯示示範資料"><span></span></button>
+      </div>
+      <div class="set-row">
+        <div class="set-text">
+          <div class="set-title">資料儲存</div>
+          <div class="set-sub" id="storage-note"></div>
+        </div>
+      </div>
+      <div class="set-block">
+        <div class="set-title">備份與匯入</div>
+        <div class="set-sub" id="backup-note"></div>
+        <div class="btn-row">
+          <button type="button" class="pill-btn primary" id="export-json">匯出備份</button>
+          <button type="button" class="pill-btn" id="import-btn">匯入備份</button>
+          <button type="button" class="pill-btn" id="export-csv">匯出 CSV</button>
+        </div>
+        <div class="import-panel" id="import-panel" hidden>
+          <div class="set-sub" id="import-summary"></div>
+          <div class="btn-row">
+            <button type="button" class="pill-btn primary" id="import-ok">確認匯入</button>
+            <button type="button" class="pill-btn" id="import-cancel">取消</button>
+          </div>
+        </div>
+        <input type="file" id="import-file" class="file-hidden" accept=".json,application/json" tabindex="-1" aria-hidden="true">
+      </div>
+      <p class="set-foot">Orbit · M1 編輯、刪除與備份</p>
+    </div>
+  </section>
 
   <noscript>Orbit 需要開啟 JavaScript 才能使用。</noscript>
   <script type="module" src="js/main.js"></script>

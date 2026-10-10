@@ -50,6 +50,29 @@ export function endOfPeriod(start, level) {
   return new Date(next.getFullYear(), next.getMonth(), next.getDate() - 1);
 }
 
+/** Date → 'YYYY-MM-DD'（本地時區）。帳目的日期就用這個格式存，不會有時區造成差一天的問題。 */
+export function toKey(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 'YYYY-MM-DD' → Date（當天 00:00，本地時區）；格式或日期不合法時回傳 null。 */
+export function fromKey(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key));
+  if (!m) return null;
+  const [y, mo, da] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(y, mo - 1, da);
+  return d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === da ? d : null;
+}
+
+/** 新增視窗上的日期文字：今天／昨天／10月08日（不是今年時加年份）。 */
+export function shortDate(d, now) {
+  const diff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '昨天';
+  const md = `${pad(d.getMonth() + 1)}月${pad(d.getDate())}日`;
+  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}年${md}`;
+}
+
 export function fullDate(d) {
   return `${d.getFullYear()}年${pad(d.getMonth() + 1)}月${pad(d.getDate())}日`;
 }

@@ -65,3 +65,31 @@ test('層級升降到頭就停', () => {
   assert.equal(levelDown('week'), 'day');
   assert.equal(levelDown('day'), 'day');
 });
+
+import { toKey, fromKey, shortDate } from '../js/dateutil.js';
+
+test('toKey / fromKey 來回一致，不合法的日期回傳 null', () => {
+  assert.equal(toKey(new Date(2026, 9, 5)), '2026-10-05');
+  assert.equal(toKey(new Date(2026, 0, 1)), '2026-01-01');
+  const back = fromKey('2026-02-28');
+  assert.equal(toKey(back), '2026-02-28');
+  assert.equal(fromKey('2026-02-30'), null);
+  assert.equal(fromKey('2026-13-01'), null);
+  assert.equal(fromKey('abc'), null);
+  assert.equal(fromKey(''), null);
+  assert.equal(toKey(fromKey('2024-02-29')), '2024-02-29');
+  assert.equal(fromKey('2026-02-29'), null);
+});
+
+test('日期字串排序與日期先後一致（用來篩選期間）', () => {
+  assert.ok('2026-09-30' < '2026-10-01');
+  assert.ok('2025-12-31' < '2026-01-01');
+});
+
+test('shortDate：今天、昨天、同年、不同年', () => {
+  const now = new Date(2026, 9, 10, 23, 59);
+  assert.equal(shortDate(new Date(2026, 9, 10), now), '今天');
+  assert.equal(shortDate(new Date(2026, 9, 9), now), '昨天');
+  assert.equal(shortDate(new Date(2026, 9, 8), now), '10月08日');
+  assert.equal(shortDate(new Date(2025, 11, 31), now), '2025年12月31日');
+});
