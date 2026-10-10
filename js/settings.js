@@ -13,10 +13,11 @@ const $ = (id) => document.getElementById(id);
  * @param {{getDemo:()=>boolean, setDemo:(on:boolean)=>void, getEntries:()=>object[],
  *          applyImport:(plan:object)=>Promise<void>, toast:(msg:string, ms?:number)=>void, newId:()=>string}} deps
  */
-export function createSettings({ getDemo, setDemo, getCb, setCb, getCategories, getEntries, applyImport, toast, newId }) {
+export function createSettings({ getDemo, setDemo, getView, setView, getCb, setCb, getCategories, getEntries, applyImport, toast, newId }) {
   const el = $('settings-sheet');
   const sw = $('demo-switch');
   const cbSw = $('cb-switch');
+  const viewSw = $('view-switch');
   const note = $('storage-note');
   const backupNote = $('backup-note');
   const panel = $('import-panel');
@@ -27,6 +28,11 @@ export function createSettings({ getDemo, setDemo, getCb, setCb, getCategories, 
     const on = getDemo();
     sw.setAttribute('aria-checked', String(on));
     sw.classList.toggle('on', on);
+    viewSw.querySelectorAll('button').forEach((b) => {
+      const on = b.dataset.view === getView();
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
     const cb = getCb();
     cbSw.setAttribute('aria-checked', String(cb));
     cbSw.classList.toggle('on', cb);
@@ -60,6 +66,13 @@ export function createSettings({ getDemo, setDemo, getCb, setCb, getCategories, 
 
   sw.addEventListener('click', () => {
     setDemo(!getDemo());
+    renderSwitch();
+  });
+
+  viewSw.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]');
+    if (!b || b.dataset.view === getView()) return;
+    setView(b.dataset.view);
     renderSwitch();
   });
 

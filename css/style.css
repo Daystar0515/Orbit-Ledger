@@ -606,3 +606,17 @@ html[data-cb] { --income: #946400; --expense: #1d608e; }
   .item-row { padding: 2px 0 4px; }
   .save, .del-btn { height: 46px; }
 }
+
+/* ---- 行星軌道視圖 ---- */
+:root { --orbit: rgba(28, 28, 30, 0.1); --star: rgba(28, 28, 30, 0.2); }
+@media (prefers-color-scheme: dark) { :root { --orbit: rgba(242, 242, 244, 0.13); --star: rgba(242, 242, 244, 0.6); } }
+.view-switch { flex: none; margin-top: 0; }
+.orbit-line { stroke: var(--orbit); stroke-width: 1; }
+.orbit-line.draw { animation: sweep 1000ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+.star { fill: var(--star); }
+.star.tw { animation: twinkle 3.2s ease-in-out infinite; }
+@keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.planet { cursor: pointer; outline: none; }
+.planet .halo { stroke-width: 1.5; opacity: 0.6; }
+.planet .pct { font-size: 10.5px; }
+.planet:focus-visible .halo { opacity: 1; }

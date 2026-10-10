@@ -5,6 +5,7 @@ import { makeEntries } from './sample.js';
 import { findCat, catColor, onThemeChange, UNKNOWN_CAT, loadCustom, getCustom, onCatsChange, setColorBlind, mergeCustom } from './cats.js';
 import { totalsByCategory } from './stats.js';
 import { buildSegments, renderRing, percentText } from './ring.js';
+import { renderOrbit, stopOrbit } from './orbit.js';
 import { attachGestures } from './gestures.js';
 import * as db from './db.js';
 import { getPref, setPref } from './prefs.js';
@@ -27,6 +28,7 @@ const state = {
   entries: [], // 帳本裡的真實帳目（從資料庫讀進來）
   showDemo: getPref('demo', false), // 示範資料：預設關閉
   colorBlind: getPref('cb', false), // 紅綠色盲友善模式
+  view: getPref('view', 'ring') === 'orbit' ? 'orbit' : 'ring', // 圓環或行星軌道
 };
 
 /** 色盲模式：類別顏色走另一組調色盤，整個畫面的支出／收入色也用 data-cb 換掉。 */
@@ -150,7 +152,15 @@ function render({ grow = true } = {}) {
   });
 
   // 圓環與中央文字
-  renderRing(els.ring, data, { selectedId: state.selectedId, animate: grow && !reduceMotion, formatMoney: money });
+  const ringOpts = { selectedId: state.selectedId, animate: grow && !reduceMotion, formatMoney: money };
+  els.ringWrap.dataset.view = state.view;
+  if (state.view === 'orbit') {
+    const tint = getComputedStyle(document.documentElement).getPropertyValue(state.type === 'income' ? '--income' : '--expense').trim();
+    renderOrbit(els.ring, data, { ...ringOpts, tint, reduce: reduceMotion, isPaused: anySheetOpen });
+  } else {
+    stopOrbit();
+    renderRing(els.ring, data, ringOpts);
+  }
   const typeName = TYPE_NAMES[state.type];
   if (selected) {
     els.caption.textContent = selected.name;
@@ -427,6 +437,13 @@ const settings = createSettings({
     state.showDemo = on;
     setPref('demo', on);
     render({ grow: false });
+  },
+  getView: () => state.view,
+  setView(v) {
+    state.view = v === 'orbit' ? 'orbit' : 'ring';
+    setPref('view', state.view);
+    state.selectedId = null;
+    render();
   },
   getCb: () => state.colorBlind,
   setCb(on) {
