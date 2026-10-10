@@ -1,8 +1,8 @@
 // Service Worker：讓 Orbit 在沒有網路時也能開啟。
 // 策略：有網路時一律抓最新檔案（並更新快取），沒網路時用快取。
-// 改了任何檔案後，把 CACHE 的版本號加一，舊快取就會被清掉。
+// 改了任何檔案後，把 CACHE 的名稱改掉（例如加上 -1），舊快取就會被清掉。
 
-const CACHE = 'orbit-v11';
+const CACHE = 'orbit-1.0.0'; // 跟著 App 版本走；同一版本內改了檔案就加上 -1、-2…
 const FILES = [
   './',
   'index.html',
@@ -31,6 +31,9 @@ const FILES = [
   'js/asset-sheet.js',
   'js/search-sheet.js',
   'js/rows.js',
+  'js/reminders.js',
+  'js/adjust.js',
+  'js/version.js',
   'js/ring.js',
   'js/gestures.js',
   'icons/icon-192.png',

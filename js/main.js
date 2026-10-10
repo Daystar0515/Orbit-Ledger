@@ -8,6 +8,7 @@ import { buildSegments, renderRing, percentText } from './ring.js';
 import { renderOrbit, stopOrbit, collapseOrbit } from './orbit.js';
 import { createDatePicker } from './date-picker.js';
 import { loadAccounts, getAccounts, onAccountsChange, mergeAccounts } from './accounts.js';
+import { dueReminders, reminderText } from './reminders.js';
 import { createAccEditor } from './acc-editor.js';
 import { createAssetSheet } from './asset-sheet.js';
 import { createSearchSheet } from './search-sheet.js';
@@ -174,7 +175,15 @@ function render({ grow = true, from = 'in' } = {}) {
   els.ring.setAttribute('aria-label', `${typeName}圓環，${els.caption.textContent} ${money(selected ? selected.amount : data.total)}`);
 
   // 明細列表（全部帳目；收入與支出以顏色與正負號區分）
-  renderList(entries, state.level);
+  // 點選星球（或圓環色塊）時，那個類別的紀錄排到最前面；「其他」代表被合併的小類別
+  let selIds = null;
+  if (selected) {
+    if (selected.id === 'other') {
+      const shown = new Set(data.segments.filter((x) => x.id !== 'other').map((x) => x.id));
+      selIds = new Set(entries.filter((e) => e.type === state.type && !shown.has(e.cat.id)).map((e) => e.cat.id));
+    } else selIds = new Set([selected.id]);
+  }
+  renderList(orderEntries(entries, state.type, selIds), state.level, selIds);
 }
 
 /** 中央金額：「NT$」做成較小的前綴，數字依位數縮小，避免碰到圓環內緣。金額變動時數字會滾動過去。 */
@@ -206,7 +215,25 @@ function setAmount(n) {
   tweenRaf = requestAnimationFrame(step);
 }
 
-function renderList(entries, level) {
+/**
+ * 明細的排列順序：
+ *   1. 點選中的類別（目前宇宙的收支）
+ *   2. 目前宇宙的收支（支出宇宙時是支出，收入宇宙時是收入）
+ *   3. 另一種收支
+ *   4. 轉帳
+ * 同一組裡維持新的在上面。
+ */
+function orderEntries(entries, type, selIds) {
+  const rank = (e) => {
+    if (e.type === type && selIds && selIds.has(e.cat.id)) return 0;
+    if (e.type === type) return 1;
+    if (e.type === 'transfer') return 3;
+    return 2;
+  };
+  return entries.map((e, i) => [e, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([e]) => e);
+}
+
+function renderList(entries, level, selIds = null) {
   els.list.replaceChildren();
   if (entries.length === 0) {
     const li = document.createElement('li');
@@ -218,14 +245,23 @@ function renderList(entries, level) {
     return;
   }
   entries.forEach((e, i) => {
-    els.list.appendChild(makeRow(e, { showDate: level !== 'day', editable: !e.demo, index: i }));
+    const row = makeRow(e, { showDate: level !== 'day', editable: !e.demo, index: i });
+    if (selIds && e.type === state.type && selIds.has(e.cat.id)) row.classList.add('hl'); // 被點選的類別：淡淡標示
+    els.list.appendChild(row);
   });
 }
 
 // ---- 操作 ----
 
-function go(n) {
+/** 往後最遠可以滑到哪一天：今天，或預先記的最晚一筆未來收支。 */
+function forwardLimit() {
   const today = new Date();
+  const last = state.entries.reduce((m, e) => (e.date > m ? e.date : m), toKey(today));
+  return fromKey(last) || today;
+}
+
+function go(n) {
+  const today = forwardLimit();
   if (n > 0 && !canGoForward(state.anchor, state.level, today)) {
     playAnim('anim-bump'); // 已經是最近的期間
     return;
@@ -402,7 +438,8 @@ const entrySheet = createEntrySheet({
     else state.entries.push(entry);
     db.requestPersistence(); // 請瀏覽器盡量別自動清掉這份資料
     showEntry(entry, { sweep: !isEdit && entry.type !== 'transfer' });
-    toast(`${isEdit ? '已更新' : '已記下'} ${entryName(entry)} ${money(entry.amount)}`);
+    const future = entry.date > toKey(new Date());
+    toast(`${isEdit ? '已更新' : future ? '已預先記下' : '已記下'} ${entryName(entry)} ${money(entry.amount)}`);
   },
   onDelete: removeEntry,
 });
@@ -425,8 +462,7 @@ const datePicker = createDatePicker({
   getEntryKeys: () => new Set(state.entries.map((e) => e.date)),
   onLevel: (level) => setLevel(level),
   onPick(level, date) {
-    const today = new Date();
-    setLevel(level, date > today ? today : date);
+    setLevel(level, date); // 可以選未來的日期（查看或預先記帳）
   },
 });
 els.periodBtn.addEventListener('click', () => datePicker.open());
@@ -490,9 +526,28 @@ onThemeChange(() => {
   entrySheet.refreshTheme();
 });
 
-// 回到前景時若已經跨日，讓「今天」跟著更新。
+/**
+ * 信用卡提醒：今天如果是結帳日／繳款日的「當天／前一天／前一週」，打開 Orbit 時在畫面上提醒。
+ * 同一個提醒一天只出現一次。（App 關著時的通知要靠「加入 iPhone 行事曆」。）
+ */
+function checkReminders() {
+  const today = new Date();
+  const todayKey = toKey(today);
+  const seen = getPref('remindSeen', { day: '', keys: [] });
+  const keys = seen.day === todayKey ? seen.keys : [];
+  const list = dueReminders(getAccounts(), today).filter((r) => !keys.includes(r.key));
+  if (!list.length) return;
+  setPref('remindSeen', { day: todayKey, keys: [...keys, ...list.map((r) => r.key)] });
+  const text = list.map((r) => reminderText(r, today)).join('\n');
+  toast(`提醒：${text}`, 8000, { label: '查看', fn: () => assetSheet.open() });
+}
+
+// 回到前景時若已經跨日，讓「今天」跟著更新，並檢查提醒。
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') render({ grow: false });
+  if (document.visibilityState === 'visible') {
+    render({ grow: false });
+    checkReminders();
+  }
 });
 
 // 自訂類別有變動就存起來，畫面跟著更新
@@ -523,6 +578,7 @@ async function boot() {
   }
   render();
   if (db.mode === 'memory') toast('這個瀏覽器無法保存資料，關閉後帳目會消失', 5000);
+  else setTimeout(checkReminders, 1200); // 等行星飛出來再提醒
 }
 boot();
 

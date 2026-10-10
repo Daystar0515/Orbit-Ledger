@@ -6,6 +6,7 @@ import { getPref, setPref } from './prefs.js';
 import { buildBackup, buildCsv, parseBackup, planImport, backupFileName, lastBackupText } from './backup.js';
 import { newCustomCount } from './cats.js';
 import { newAccountCount } from './accounts.js';
+import { APP_VERSION } from './version.js';
 import { saveTextFile, pickTextFile } from './files.js';
 
 const $ = (id) => document.getElementById(id);
@@ -59,6 +60,8 @@ export function createSettings({ getDemo, setDemo, getView, setView, getCb, setC
     pending = null;
     panel.hidden = true;
   }
+
+  $('app-version').textContent = `Orbit · Version ${APP_VERSION}`;
 
   const sheet = makeSheet(el, {
     onOpen() { hidePanel(); renderSwitch(); renderStorage(); renderBackup(); },

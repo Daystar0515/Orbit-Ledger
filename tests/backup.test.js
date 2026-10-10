@@ -68,12 +68,12 @@ test('CSV：表頭、中文類別、跳脫逗號與引號、擋掉公式', () =>
     e({ id: 'd', type: 'income', catId: 'salary', note: '', amount: 100, date: '2026-10-06' }),
     { ...e({ id: 'demo' }), demo: true },
   ]);
-  assert.ok(csv.startsWith('﻿日期,收支,類別,具體事項,金額,帳戶\r\n'));
+  assert.ok(csv.startsWith('﻿日期,收支,類別,具體事項,金額,帳戶,調整\r\n'));
   const lines = csv.trim().split('\r\n');
   assert.equal(lines.length, 4);
-  assert.equal(lines[1], "2026-10-04,支出,學習,'=SUM(A1),350,");
-  assert.equal(lines[2], '2026-10-05,支出,飲食,"午餐,便當 ""大""",350,');
-  assert.equal(lines[3], '2026-10-06,收入,薪資,,100,');
+  assert.equal(lines[1], "2026-10-04,支出,學習,'=SUM(A1),350,,");
+  assert.equal(lines[2], '2026-10-05,支出,飲食,"午餐,便當 ""大""",350,,');
+  assert.equal(lines[3], '2026-10-06,收入,薪資,,100,,');
 });
 
 test('檔名與上次備份文字', () => {

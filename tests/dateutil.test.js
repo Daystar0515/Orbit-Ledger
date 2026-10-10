@@ -91,5 +91,7 @@ test('shortDate：今天、昨天、同年、不同年', () => {
   assert.equal(shortDate(new Date(2026, 9, 10), now), '今天');
   assert.equal(shortDate(new Date(2026, 9, 9), now), '昨天');
   assert.equal(shortDate(new Date(2026, 9, 8), now), '10月08日');
+  assert.equal(shortDate(new Date(2026, 9, 11), now), '明天');
+  assert.equal(shortDate(new Date(2026, 9, 20), now), '10月20日');
   assert.equal(shortDate(new Date(2025, 11, 31), now), '2025年12月31日');
 });

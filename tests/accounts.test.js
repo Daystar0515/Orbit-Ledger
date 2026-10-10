@@ -40,9 +40,25 @@ test('帳戶資料清理：類型、名稱、金額、重複編號', () => {
   ]);
   assert.deepEqual(out, [
     { id: 'x', kind: 'cash', name: '錢包很長很長很長很長', opening: 0 },
-    { id: 'z', kind: 'credit', name: '卡', opening: 5, limit: 0 },
+    { id: 'z', kind: 'credit', name: '卡', opening: 5, limit: 0, statementDay: null, dueDay: null, remind: { on: false, offsets: [1], events: ['due'] } },
   ]);
   assert.deepEqual(defaultAccounts().map((a) => a.kind), ['cash', 'credit', 'bank']);
+});
+
+test('未來的帳目：指定 asOf 時不計入餘額', () => {
+  const entries = [
+    E({ type: 'expense', catId: 'food', accountId: 'c', amount: 100, date: '2026-10-10' }),
+    E({ type: 'expense', catId: 'food', accountId: 'c', amount: 900, date: '2026-10-20' }),
+  ];
+  assert.equal(balances(accs, entries).get('c'), 0);
+  assert.equal(balances(accs, entries, '2026-10-10').get('c'), 900);
+});
+
+test('信用卡的結帳日、繳款日與提醒設定會被保留並整理', () => {
+  const [a] = cleanAccounts([{ id: 'k', kind: 'credit', name: '卡', opening: 0, limit: 0, statementDay: 5, dueDay: 40, remind: { on: true, offsets: [7, 0, 3], events: ['due', 'x'] } }]);
+  assert.equal(a.statementDay, 5);
+  assert.equal(a.dueDay, null);
+  assert.deepEqual(a.remind, { on: true, offsets: [0, 7], events: ['due'] });
 });
 
 test('金額輸入：允許逗號與空白，拒絕小數與負數', () => {
@@ -85,7 +101,7 @@ test('CSV：帳戶欄、轉帳寫成 A → B', () => {
     E({ type: 'expense', catId: 'food', accountId: 'k', amount: 250, note: '午餐' }),
   ], accs);
   const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
-  assert.equal(lines[0], '日期,收支,類別,具體事項,金額,帳戶');
-  assert.ok(lines.includes('2026-10-10,轉帳,,提款,3000,郵局 → 錢包'));
-  assert.ok(lines.includes('2026-10-10,支出,飲食,午餐,250,卡'));
+  assert.equal(lines[0], '日期,收支,類別,具體事項,金額,帳戶,調整');
+  assert.ok(lines.includes('2026-10-10,轉帳,,提款,3000,郵局 → 錢包,'));
+  assert.ok(lines.includes('2026-10-10,支出,飲食,午餐,250,卡,'));
 });

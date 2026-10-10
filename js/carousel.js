@@ -1,14 +1,19 @@
 // 橫向滑動選擇器：一次看到中間一張，左右滑動換下一個，滑到哪一張就選哪一張。
 // 用瀏覽器原生的捲動貼齊（scroll-snap），手感和 iOS 一致。最後一張可以是「新增」。
+//
+// loop：無限循環。卡片會畫三份（前、中、後），停下來時如果在前或後那份，
+// 就悄悄跳回中間那份的同一張，看起來就像可以一直滑下去。只有中間那份的卡片帶 data-id。
 
 /**
  * @param {HTMLElement} root
  * @param {{onChange:(item:object|null)=>void, onAdd?:()=>void, addLabel?:string, label?:string, renderItem?:(item:object)=>Node}} opts
  *   renderItem：自訂卡片內容（例如搜尋頁的期間總額卡）
+ *   loop：無限循環（預設關閉）
  */
-export function createCarousel(root, { onChange, onAdd, addLabel = '新增', label = '', renderItem = null }) {
+export function createCarousel(root, { onChange, onAdd, addLabel = '新增', label = '', renderItem = null, loop = false }) {
   let items = [];
-  let index = 0;
+  let index = 0; // 邏輯上的第幾張（0～n-1）
+  let copies = 1;
   let timer = 0;
   root.classList.add('carousel');
   root.setAttribute('role', 'listbox');
@@ -30,50 +35,80 @@ export function createCarousel(root, { onChange, onAdd, addLabel = '新增', lab
     return best;
   }
 
-  function mark(i) {
+  const n = () => items.length;
+  const logical = (p) => (n() ? p % n() : 0);
+  const middle = (i) => (copies === 3 ? n() + i : i); // 邏輯第 i 張在中間那份的位置
+
+  /** 標出畫面中間那張（用實際位置 p）。 */
+  function mark(p) {
     cards().forEach((c, k) => {
-      c.classList.toggle('on', k === i);
-      c.setAttribute('aria-selected', String(k === i));
+      c.classList.toggle('on', k === p);
+      c.setAttribute('aria-selected', String(k === p));
     });
   }
 
+  function centerOn(p) {
+    const c = cards()[p];
+    if (!c) return;
+    root.scrollTo({ left: c.offsetLeft + c.offsetWidth / 2 - root.clientWidth / 2, behavior: 'instant' });
+  }
+
   function settle() {
-    const i = centerIndex();
-    mark(i);
+    let p = centerIndex();
+    const i = logical(p);
+    if (copies === 3 && p !== middle(i)) {
+      // 滑到前或後那份：瞬間跳回中間那份的同一張（畫面看不出差別）
+      p = middle(i);
+      centerOn(p);
+    }
+    mark(p);
     if (i !== index) {
       index = i;
       onChange(items[i] || null);
     }
   }
 
+  // 手指還在螢幕上時不要跳位置（不然 iPhone 上會抖一下），放開且捲動停下來後才算選定
+  let touching = false;
+  const later = () => {
+    clearTimeout(root._t);
+    root._t = setTimeout(() => { if (!touching) settle(); }, 110);
+  };
+  root.addEventListener('touchstart', () => { touching = true; }, { passive: true });
+  const release = () => { touching = false; later(); };
+  root.addEventListener('touchend', release, { passive: true });
+  root.addEventListener('touchcancel', release, { passive: true });
+
   root.addEventListener('scroll', () => {
     cancelAnimationFrame(timer);
     timer = requestAnimationFrame(() => mark(centerIndex())); // 滑動中即時標出中間那張
-    clearTimeout(root._t);
-    root._t = setTimeout(settle, 90); // 停下來才算選定
+    later();
   }, { passive: true });
 
   root.addEventListener('click', (e) => {
     const c = e.target.closest('.car-card');
     if (!c) return;
-    const i = cards().indexOf(c);
-    if (items[i] && items[i].add) { onAdd?.(); return; }
-    scrollToIndex(i, true);
+    const p = cards().indexOf(c);
+    if (items[logical(p)] && items[logical(p)].add) { onAdd?.(); return; }
+    scrollToPhysical(p, true);
   });
 
   root.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       e.stopPropagation();
-      scrollToIndex(Math.max(0, Math.min(items.length - 1, index + (e.key === 'ArrowRight' ? 1 : -1))), true);
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      const p = middle(index) + dir;
+      if (copies === 3) scrollToPhysical(p, true); // 循環：滑到隔壁那份，停下後再跳回中間
+      else scrollToPhysical(Math.max(0, Math.min(n() - 1, p)), true);
     }
   });
 
-  function scrollToIndex(i, smooth) {
-    const c = cards()[i];
+  function scrollToPhysical(p, smooth) {
+    const c = cards()[p];
     if (!c) return;
     root.scrollTo({ left: c.offsetLeft + c.offsetWidth / 2 - root.clientWidth / 2, behavior: smooth ? 'smooth' : 'instant' });
-    if (!smooth) { index = i; mark(i); }
+    if (!smooth) { index = logical(p); mark(p); }
   }
 
   return {
@@ -85,11 +120,14 @@ export function createCarousel(root, { onChange, onAdd, addLabel = '新增', lab
       items = [...list];
       if (onAdd) items.push({ id: '__add', name: `＋ ${addLabel}`, add: true });
       root.replaceChildren();
-      items.forEach((it) => {
+      copies = loop && items.length >= 3 ? 3 : 1;
+      const all = copies === 3 ? [...items, ...items, ...items] : items;
+      all.forEach((it, p) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `car-card${it.add ? ' add' : ''}`;
-        b.dataset.id = it.id;
+        if (copies === 1 || (p >= items.length && p < items.length * 2)) b.dataset.id = it.id;
+        else { b.dataset.cid = it.id; b.tabIndex = -1; b.setAttribute('aria-hidden', 'true'); } // 前後兩份是複本
         b.setAttribute('role', 'option');
         if (renderItem && !it.add) {
           b.appendChild(renderItem(it));
@@ -120,13 +158,13 @@ export function createCarousel(root, { onChange, onAdd, addLabel = '新增', lab
       const at = Math.max(0, items.findIndex((it) => it.id === selectId));
       index = at;
       // 版面算好後再定位，才量得到寬度
-      requestAnimationFrame(() => scrollToIndex(at, false));
-      mark(at);
+      requestAnimationFrame(() => scrollToPhysical(middle(at), false));
+      mark(middle(at));
     },
     value: () => (items[index] && !items[index].add ? items[index] : null),
     select(id, smooth = true) {
       const i = items.findIndex((it) => it.id === id);
-      if (i >= 0) scrollToIndex(i, smooth);
+      if (i >= 0) scrollToPhysical(middle(i), smooth);
     },
     count: () => items.length,
     selectedId: () => (items[index] ? items[index].id : null),

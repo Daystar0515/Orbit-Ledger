@@ -1,8 +1,9 @@
 // 明細列（主畫面與搜尋頁共用）。帳目要先轉成「畫面用格式」（toView）。
 
 import { findCat, catColor, UNKNOWN_CAT } from './cats.js';
-import { fromKey } from './dateutil.js';
+import { fromKey, toKey } from './dateutil.js';
 import { findAccount } from './accounts.js';
+import { adjustText } from './adjust.js';
 
 const nf = new Intl.NumberFormat('zh-TW');
 const pad = (n) => String(n).padStart(2, '0');
@@ -26,6 +27,8 @@ export function toView(e) {
     note: e.note || '',
     createdAt: e.createdAt || 0,
     demo: !!e.demo,
+    base: e.base,
+    adjust: e.adjust || [],
   };
 }
 
@@ -58,12 +61,22 @@ export function makeRow(e, { showDate, editable, index = 0 }) {
   const cat = document.createElement('div');
   cat.className = 'cat';
   cat.textContent = e.cat.name;
+  if (toKey(e.date) > toKey(new Date())) {
+    // 預先記的未來收支
+    li.classList.add('future');
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = '預計';
+    cat.appendChild(tag);
+  }
   const note = document.createElement('div');
   note.className = 'note';
   const parts = [];
   if (showDate) parts.push(`${pad(e.date.getMonth() + 1)}/${pad(e.date.getDate())}`);
   if (isT) parts.push(transferText(e));
   if (e.note) parts.push(e.note);
+  const adj = adjustText(e);
+  if (adj) parts.push(adj);
   note.textContent = parts.join(' · ');
   meta.append(cat);
   if (parts.length) meta.append(note);

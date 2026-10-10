@@ -3,6 +3,7 @@
 
 import { findCat } from './cats.js';
 import { fromKey, toKey } from './dateutil.js';
+import { cleanAdjust, adjustText } from './adjust.js';
 
 export const BACKUP_APP = 'orbit';
 export const BACKUP_VERSION = 3; // 2：多了自訂類別；3：多了帳戶與轉帳（讀得懂舊版備份）
@@ -29,6 +30,10 @@ function cleanEntry(e) {
     if (e.accountId) out.accountId = e.accountId;
   }
   Object.assign(out, { amount: e.amount, date: e.date, note: e.note || '', createdAt: e.createdAt || 0 });
+  if (e.adjust && e.adjust.length) {
+    if (e.type !== 'transfer') out.base = e.base;
+    out.adjust = e.adjust.map((a) => ({ k: a.k, v: a.v }));
+  }
   if (e.updatedAt) out.updatedAt = e.updatedAt;
   return out;
 }
@@ -71,6 +76,14 @@ export function validateEntry(raw, makeId) {
     if (okId(raw.accountId)) out.accountId = raw.accountId;
   }
   Object.assign(out, { amount: raw.amount, date: raw.date, note, createdAt });
+  const adj = cleanAdjust(raw.adjust, out.type, MAX_AMOUNT);
+  if (adj.length) {
+    out.adjust = adj;
+    if (out.type !== 'transfer') {
+      if (!Number.isInteger(raw.base) || raw.base < 1 || raw.base > MAX_AMOUNT) return null;
+      out.base = raw.base;
+    }
+  }
   if (Number.isFinite(raw.updatedAt) && raw.updatedAt > 0) out.updatedAt = raw.updatedAt;
   return out;
 }
@@ -110,7 +123,8 @@ export function parseBackup(text, makeId) {
   return { ok: true, entries, skipped, categories, accounts, exportedAt: typeof data.exportedAt === 'string' ? data.exportedAt : null };
 }
 
-const sameEntry = (a, b) =>
+const sameAdj = (a, b) => JSON.stringify(a.adjust || []) === JSON.stringify(b.adjust || []);
+const sameEntry = (a, b) => sameAdj(a, b) &&
   a.type === b.type && a.catId === b.catId && a.amount === b.amount && a.date === b.date && a.note === b.note
   && (a.accountId || '') === (b.accountId || '') && (a.fromId || '') === (b.fromId || '') && (a.toId || '') === (b.toId || '');
 const stamp = (e) => e.updatedAt || e.createdAt || 0;
@@ -157,14 +171,14 @@ export function buildCsv(entries, accounts = []) {
     .filter((e) => !e.demo)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || 0) - (b.createdAt || 0));
-  const lines = [['日期', '收支', '類別', '具體事項', '金額', '帳戶'].join(',')];
+  const lines = [['日期', '收支', '類別', '具體事項', '金額', '帳戶', '調整'].join(',')];
   for (const e of rows) {
     if (e.type === 'transfer') {
-      lines.push([e.date, TYPE_NAMES.transfer, '', e.note || '', e.amount, `${accName(e.fromId)} → ${accName(e.toId)}`].map(csvCell).join(','));
+      lines.push([e.date, TYPE_NAMES.transfer, '', e.note || '', e.amount, `${accName(e.fromId)} → ${accName(e.toId)}`, adjustText(e)].map(csvCell).join(','));
       continue;
     }
     const cat = findCat(e.type, e.catId);
-    lines.push([e.date, TYPE_NAMES[e.type] || e.type, cat ? cat.name : e.catId, e.note || '', e.amount, accName(e.accountId)].map(csvCell).join(','));
+    lines.push([e.date, TYPE_NAMES[e.type] || e.type, cat ? cat.name : e.catId, e.note || '', e.amount, accName(e.accountId), adjustText(e)].map(csvCell).join(','));
   }
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }

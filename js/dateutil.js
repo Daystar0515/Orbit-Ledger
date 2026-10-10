@@ -69,6 +69,7 @@ export function shortDate(d, now) {
   const diff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
   if (diff === 0) return '今天';
   if (diff === 1) return '昨天';
+  if (diff === -1) return '明天';
   const md = `${pad(d.getMonth() + 1)}月${pad(d.getDate())}日`;
   return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}年${md}`;
 }

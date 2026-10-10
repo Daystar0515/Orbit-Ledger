@@ -100,9 +100,13 @@
       </div>
     </div>
 
-    <div class="amount-line empty" id="sheet-amount" aria-live="polite">
-      <span class="cur">NT$</span><span id="amount-text">0</span>
+    <div class="amount-row">
+      <div class="amount-line empty" id="sheet-amount" aria-live="polite">
+        <span class="cur">NT$</span><span id="amount-text">0</span>
+      </div>
+      <button type="button" class="adj-btn" id="adj-btn" aria-label="手續費、優惠等其他費用">手續費</button>
     </div>
+    <div class="adj-chips" id="adj-chips" hidden></div>
 
     <div class="cat-wrap">
       <div id="cat-car" aria-label="類別，左右滑動更換"></div>
@@ -145,6 +149,20 @@
       <button type="button" class="del-btn" id="sheet-delete" hidden>刪除</button>
       <button type="button" class="save is-off" id="sheet-save">儲存</button>
     </div>
+  </section>
+
+  <!-- 手續費、優惠等金額調整（疊在記帳視窗上面） -->
+  <section class="sheet stack" id="adj-sheet" role="dialog" aria-modal="true" aria-label="其他費用與優惠" tabindex="-1">
+    <div class="sheet-top">
+      <div class="grab"><span></span></div>
+      <div class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <span class="head-title">其他費用與優惠</span>
+        <span class="head-spacer"></span>
+      </div>
+    </div>
+    <p class="set-sub adj-intro" id="adj-intro"></p>
+    <ul class="adj-list" id="adj-list"></ul>
   </section>
 
   <!-- 新增／編輯自訂類別（疊在記帳視窗上面） -->
@@ -214,6 +232,55 @@
       <div id="acc-limit-row" hidden>
         <label class="field-label" for="acc-limit">額度上限（自訂）</label>
         <input type="text" class="note-input" id="acc-limit" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="off" placeholder="例如：50000">
+        <div class="field-two">
+          <label class="field-col"><span class="field-label">結帳日</span><select class="note-input day-select" id="acc-statement" aria-label="結帳日"></select></label>
+          <label class="field-col"><span class="field-label">繳款日</span><select class="note-input day-select" id="acc-due" aria-label="繳款日"></select></label>
+        </div>
+      </div>
+      <div id="acc-int-row" hidden>
+        <div class="set-row remind-row">
+          <div class="set-text">
+            <div class="set-title">設定利率</div>
+            <div class="set-sub">記下年利率、計息日與發息日，資產頁會估算利息</div>
+          </div>
+          <button type="button" class="switch" id="acc-int" role="switch" aria-checked="false" aria-label="設定利率"><span></span></button>
+        </div>
+        <div id="acc-int-fields" hidden>
+          <label class="field-label" for="acc-rate">年利率（%）</label>
+          <input type="text" class="note-input" id="acc-rate" inputmode="decimal" maxlength="7" autocomplete="off" placeholder="例如：1.5">
+          <div class="field-two">
+            <label class="field-col"><span class="field-label">計息日</span><select class="note-input day-select" id="acc-accrual" aria-label="計息日"></select></label>
+            <label class="field-col"><span class="field-label">發息日</span><select class="note-input day-select" id="acc-pay" aria-label="發息日"></select></label>
+          </div>
+          <label class="field-label" for="acc-freq">發息頻率</label>
+          <select class="note-input day-select" id="acc-freq" aria-label="發息頻率">
+            <option value="monthly">每月</option>
+            <option value="quarterly">每季（3、6、9、12 月）</option>
+            <option value="semiannual">每半年（6、12 月）</option>
+            <option value="annual">每年（12 月）</option>
+          </select>
+        </div>
+      </div>
+      <div id="acc-remind-block" hidden>
+        <div class="set-row remind-row">
+          <div class="set-text">
+            <div class="set-title">提醒</div>
+            <div class="set-sub" id="acc-remind-sub">打開 Orbit 時在畫面上提醒</div>
+          </div>
+          <button type="button" class="switch" id="acc-remind" role="switch" aria-checked="false" aria-label="提醒"><span></span></button>
+        </div>
+        <div id="acc-remind-opts" hidden>
+          <div class="field-label">提醒哪些日子</div>
+          <div class="chips" id="acc-remind-events" role="group" aria-label="提醒哪些日子"></div>
+          <div class="field-label">什麼時候提醒</div>
+          <div class="chips" id="acc-remind-offsets" role="group" aria-label="什麼時候提醒">
+            <button type="button" data-off="0">當天</button>
+            <button type="button" data-off="1">前一天</button>
+            <button type="button" data-off="7">前一週</button>
+          </div>
+          <button type="button" class="pill-btn ics-btn" id="acc-ics">加入 iPhone 行事曆</button>
+          <p class="set-sub ics-note">Orbit 是網頁 App，關著的時候沒辦法主動通知。加入行事曆後，由 iPhone 的行事曆在早上 9 點提醒你（自動重複）。</p>
+        </div>
       </div>
       <div class="actions">
         <button type="button" class="del-btn" id="acc-delete" hidden>刪除</button>
@@ -326,7 +393,7 @@
         </div>
         <input type="file" id="import-file" class="file-hidden" accept=".json,application/json" tabindex="-1" aria-hidden="true">
       </div>
-      <p class="set-foot">Orbit · M1 編輯、刪除與備份</p>
+      <p class="set-foot" id="app-version">Orbit · Version 1.0.0</p>
     </div>
   </section>
 

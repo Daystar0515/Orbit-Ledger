@@ -12,6 +12,7 @@ export function attachRowSwipe(list, { onTap, onDelete, onDemoTap }) {
   let open = null; // 目前露出刪除按鈕的那一列
   let drag = null;
   let suppressClick = false;
+  let swallow = false;
 
   const fg = (row) => row.querySelector('.row-fg');
 
@@ -30,8 +31,13 @@ export function attachRowSwipe(list, { onTap, onDelete, onDemoTap }) {
 
   list.addEventListener('pointerdown', (e) => {
     const row = e.target.closest('.row.swipe');
+    swallow = false;
     if (!row || e.target.closest('.row-del') || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    if (open && open !== row) closeOpen();
+    if (open && open !== row) {
+      // 有一列露出刪除鈕時點別列：只是收起來，這次點擊不算編輯
+      closeOpen();
+      swallow = true;
+    }
     drag = { row, id: e.pointerId, x0: e.clientX, y0: e.clientY, base: open === row ? -REVEAL : 0, moving: false, x: 0 };
   });
 
@@ -54,6 +60,7 @@ export function attachRowSwipe(list, { onTap, onDelete, onDemoTap }) {
     const d = drag;
     drag = null;
     if (!d.moving) return;
+    swallow = false;
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 60);
     const reveal = d.x < -REVEAL / 2;
@@ -65,6 +72,7 @@ export function attachRowSwipe(list, { onTap, onDelete, onDemoTap }) {
   list.addEventListener('pointercancel', finish);
 
   list.addEventListener('click', (e) => {
+    if (swallow) { swallow = false; return; }
     if (suppressClick) return;
     const row = e.target.closest('.row');
     if (!row) return;

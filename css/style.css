@@ -804,3 +804,94 @@ html[data-cb] { --income: #946400; --expense: #1d608e; }
 .acc-car .car-name, .acc-car .car-sub { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
 .acc-car .car-sub { margin-top: 2px; font-size: 11px; letter-spacing: 0.08em; }
 .view-switch button { padding: 5px 12px; }
+
+/* 信用卡：結帳日／繳款日與提醒 */
+.field-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.field-col { display: flex; flex-direction: column; min-width: 0; }
+.field-col .field-label { margin-top: 14px; }
+.day-select { -webkit-appearance: none; appearance: none; text-align: center; text-align-last: center; }
+.remind-row { margin-top: 10px; border-top: 1px solid var(--line); border-bottom: 0; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips button {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  font-size: 14.5px;
+  transition: background 0.25s var(--ease), border-color 0.25s var(--ease), transform 0.2s var(--ease);
+}
+.chips button.on { border-color: var(--ink); background: var(--track); font-weight: 650; }
+.chips button:active { transform: scale(0.96); }
+.ics-btn { width: 100%; margin-top: 16px; }
+.ics-note { margin-top: 8px; }
+
+/* 預先記的未來收支 */
+.tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--track); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: 2px; }
+.row.future .amt { opacity: 0.55; }
+.date-ctl.future { box-shadow: inset 0 0 0 1.5px var(--muted); }
+.a-note { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.a-sub + .a-sub { margin-top: 1px; }
+.toast.has-action { white-space: normal; width: max-content; max-width: calc(100vw - 32px); border-radius: 18px; line-height: 1.4; }
+.toast-act { flex: none; white-space: nowrap; }
+.toast.has-action { white-space: pre-line; }
+.a-remind { color: var(--income); font-weight: 600; }
+
+/* 點選星球時，該類別的明細排到最前面並淡淡標示 */
+.row.hl .row-fg { background: color-mix(in srgb, var(--track) 70%, var(--bg)); border-radius: 12px; padding-left: 8px; padding-right: 8px; }
+
+/* ---- 金額列：右邊的「手續費」按鈕（和數字鍵同樣的外觀） ---- */
+.amount-row { flex: none; display: grid; grid-template-columns: 1fr calc((100% - 16px) / 3); gap: 8px; align-items: center; }
+.amount-row .amount-line { min-width: 0; justify-content: center; }
+.adj-btn {
+  height: 48px;
+  border-radius: var(--r-md);
+  background: var(--keycap);
+  font-size: 16px;
+  font-weight: 600;
+  transition: transform 0.2s var(--ease), background 0.2s;
+}
+.adj-btn:active { background: var(--track); transform: scale(0.97); }
+.adj-btn.has { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.amount-line.negative #amount-text { color: var(--muted); }
+
+/* 金額組成：原價、手續費、優惠……點一下就用鍵盤改那一項 */
+.adj-chips { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 0 0 6px; }
+.adj-chips[hidden] { display: none; }
+.adj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.adj-chip.on { border-color: var(--ink); background: var(--track); font-weight: 650; }
+.chip-x { width: 20px; height: 20px; margin-right: -4px; border-radius: 50%; color: var(--muted); font-size: 15px; line-height: 1; }
+.chip-x:active { background: var(--line); }
+
+/* 調整項目清單 */
+.adj-intro { padding: 0 2px 8px; }
+.adj-list { list-style: none; padding-bottom: 8px; }
+.adj-item {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  text-align: left;
+}
+.adj-item:active { background: var(--track); }
+.adj-name { font-size: 16px; font-weight: 600; }
+.adj-eff { font-size: 13px; color: var(--muted); }
+.adj-eff.up::before { content: "＋ "; }
+.adj-eff.down::before { content: "－ "; }
+.adj-item.added .adj-name::after { content: "已加入"; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--track); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: 2px; }
+@media (max-height: 760px) { .adj-btn { height: 42px; } }

@@ -8,6 +8,7 @@ import { createCatEditor } from './cat-editor.js';
 import { toKey, fromKey, shortDate, addPeriods } from './dateutil.js';
 import { KINDS, accountsFor, getAccounts, findAccount } from './accounts.js';
 import { getPref, setPref } from './prefs.js';
+import { adjOptions, adjSign, adjName, applyAdjust } from './adjust.js';
 
 const MAX_DIGITS = 8; // 最多 99,999,999 元
 const NOTE_MAX = 40;
@@ -38,7 +39,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
   const accLabel = $('acc-label');
   const toWrap = $('to-wrap');
 
-  const s = { type: 'expense', digits: '', catId: null, accountId: null, toId: null, dateKey: '', note: '', editing: null };
+  // digits：原價的數字；adjust：手續費、優惠等 [{ k, digits }]；active：鍵盤正在輸入哪一項
+  const s = { type: 'expense', digits: '', adjust: [], active: 'base', catId: null, accountId: null, toId: null, dateKey: '', note: '', editing: null };
   let saving = false;
 
   const sheet = makeSheet(el, {
@@ -49,8 +51,12 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
   });
 
   const todayKey = () => toKey(new Date());
+  // 可以預先記未來的收支，最多到兩年後
+  const maxKey = () => { const d = new Date(); return toKey(new Date(d.getFullYear() + 2, d.getMonth(), d.getDate())); };
   const isT = () => s.type === 'transfer';
-  const valid = () => Number(s.digits) > 0 && !!s.accountId && (isT() ? !!s.toId && s.toId !== s.accountId : !!s.catId);
+  const adjList = () => s.adjust.filter((a) => Number(a.digits) > 0).map((a) => ({ k: a.k, v: Number(a.digits) }));
+  const total = () => applyAdjust(Number(s.digits) || 0, adjList(), s.type);
+  const valid = () => Number(s.digits) > 0 && total() > 0 && !!s.accountId && (isT() ? !!s.toId && s.toId !== s.accountId : !!s.catId);
 
   function renderType() {
     el.dataset.type = s.type;
@@ -63,6 +69,7 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
 
   const carousel = createCarousel(grid, {
     label: '類別，左右滑動更換',
+    loop: true,
     addLabel: '新增類別',
     onAdd: () => editor.open({ type: s.type }),
     onChange(item) {
@@ -94,12 +101,14 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
   });
   const fromCar = createCarousel(accCar, {
     label: '帳戶，左右滑動更換',
+    loop: true,
     addLabel: '新增帳戶',
     onAdd: () => addAcc('from'),
     onChange(item) { s.accountId = item && !item.add ? item.id : null; renderAmount(); },
   });
   const toCar = createCarousel($('to-car'), {
     label: '轉入帳戶，左右滑動更換',
+    loop: true,
     addLabel: '新增帳戶',
     onAdd: () => addAcc('to'),
     onChange(item) { s.toId = item && !item.add ? item.id : null; renderAmount(); },
@@ -163,9 +172,97 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
     delBtn.hidden = !edit;
   }
 
+  // ---- 手續費、優惠等調整 ----
+  const adjBtn = $('adj-btn');
+  const chips = $('adj-chips');
+  const adjEl = $('adj-sheet');
+  const adjListEl = $('adj-list');
+  const adjSheet = makeSheet(adjEl, { stack: true });
+
+  function openAdj() {
+    const opts = adjOptions(s.type);
+    $('adj-intro').textContent = s.type === 'transfer'
+      ? '轉帳手續費會從轉出帳戶多扣，轉入的金額不變。'
+      : '選一個項目，再用鍵盤輸入它的金額。總金額會自動算好。';
+    adjListEl.replaceChildren();
+    opts.forEach((o) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'adj-item';
+      b.dataset.k = o.k;
+      const nm = document.createElement('span');
+      nm.className = 'adj-name';
+      nm.textContent = o.name;
+      const eff = document.createElement('span');
+      const plus = adjSign(s.type, o.k) > 0;
+      eff.className = `adj-eff ${plus ? 'up' : 'down'}`;
+      eff.textContent = s.type === 'transfer' ? '轉出帳戶多扣' : plus ? '加在金額上' : '從金額扣除';
+      b.append(nm, eff);
+      if (s.adjust.some((a) => a.k === o.k)) b.classList.add('added');
+      li.appendChild(b);
+      adjListEl.appendChild(li);
+    });
+    adjSheet.open();
+  }
+  adjBtn.addEventListener('click', openAdj);
+  adjListEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.adj-item');
+    if (!b) return;
+    const k = b.dataset.k;
+    if (!s.adjust.some((a) => a.k === k)) s.adjust.push({ k, digits: '' });
+    s.active = k; // 接下來鍵盤輸入的是這一項
+    adjSheet.close();
+    renderAmount();
+  });
+  chips.addEventListener('click', (e) => {
+    const x = e.target.closest('.chip-x');
+    const c = e.target.closest('.adj-chip');
+    if (!c) return;
+    if (x) {
+      s.adjust = s.adjust.filter((a) => a.k !== c.dataset.k);
+      if (s.active === c.dataset.k) s.active = 'base';
+    } else s.active = c.dataset.k;
+    renderAmount();
+  });
+
+  function renderChips() {
+    chips.hidden = s.adjust.length === 0;
+    chips.replaceChildren();
+    if (!s.adjust.length) { s.active = 'base'; return; }
+    const make = (k, label, value, removable) => {
+      const c = document.createElement('div');
+      c.className = `adj-chip${s.active === k ? ' on' : ''}`;
+      c.dataset.k = k;
+      c.setAttribute('role', 'button');
+      c.tabIndex = 0;
+      const t = document.createElement('span');
+      t.textContent = `${label} ${value}`;
+      c.appendChild(t);
+      if (removable) {
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'chip-x';
+        x.setAttribute('aria-label', `移除${label}`);
+        x.textContent = '×';
+        c.appendChild(x);
+      }
+      chips.appendChild(c);
+    };
+    make('base', isT() ? '轉帳' : '原價', s.digits ? nf.format(Number(s.digits)) : '0', false);
+    for (const a of s.adjust) {
+      const sign = adjSign(s.type, a.k) > 0 ? '+' : '−';
+      make(a.k, adjName(a.k), `${sign}${a.digits ? nf.format(Number(a.digits)) : '0'}`, true);
+    }
+  }
+
   function renderAmount() {
-    amountText.textContent = s.digits ? nf.format(Number(s.digits)) : '0';
+    const t = total();
+    amountText.textContent = s.digits || s.adjust.length ? nf.format(Math.max(t, 0)) : '0';
     amountEl.classList.toggle('empty', !s.digits);
+    amountEl.classList.toggle('negative', t < 0);
+    adjBtn.classList.toggle('has', s.adjust.length > 0);
+    renderChips();
     const len = amountText.textContent.length;
     amountEl.dataset.size = len <= 7 ? 'l' : len <= 10 ? 'm' : 's';
     saveBtn.classList.toggle('is-off', !valid());
@@ -175,8 +272,9 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
     const d = fromKey(s.dateKey);
     dateText.textContent = shortDate(d, new Date());
     dateInput.value = s.dateKey;
-    dateInput.max = todayKey();
-    nextBtn.disabled = s.dateKey >= todayKey();
+    dateInput.max = maxKey();
+    nextBtn.disabled = s.dateKey >= maxKey();
+    dateText.parentElement.parentElement.classList.toggle('future', s.dateKey > todayKey());
   }
 
   function setType(type) {
@@ -185,17 +283,22 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
     renderType();
     renderCats(null); // 支出與收入的類別不同，換類型就回到第一個類別
     if (!s.editing) { s.accountId = null; s.toId = null; } // 換類型時改用該類型上次用的帳戶
+    s.adjust = s.adjust.filter((a) => adjSign(type, a.k) !== 0); // 這種收支不適用的調整項目拿掉
+    if (!s.adjust.some((a) => a.k === s.active)) s.active = 'base';
     renderAccounts();
   }
 
+  /** 鍵盤輸入：寫進目前選中的那一項（原價，或某個手續費／優惠）。 */
   function pressKey(k) {
-    if (k === 'back') s.digits = s.digits.slice(0, -1);
+    const target = s.active === 'base' ? null : s.adjust.find((a) => a.k === s.active);
+    let d = target ? target.digits : s.digits;
+    if (k === 'back') d = d.slice(0, -1);
     else if (k === '00') {
-      if (s.digits && s.digits.length + 2 <= MAX_DIGITS) s.digits += '00';
+      if (d && d.length + 2 <= MAX_DIGITS) d += '00';
     } else if (/^\d$/.test(k)) {
-      if (s.digits === '' && k === '0') { renderAmount(); return; } // 不接受開頭的 0
-      if (s.digits.length < MAX_DIGITS) s.digits += k;
+      if (!(d === '' && k === '0') && d.length < MAX_DIGITS) d += k; // 不接受開頭的 0
     }
+    if (target) target.digits = d; else s.digits = d;
     renderAmount();
   }
 
@@ -207,6 +310,11 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
 
   async function save() {
     if (saving) return;
+    if (s.digits && total() <= 0) {
+      toast('優惠扣掉後的金額要大於 0');
+      shake(amountEl);
+      return;
+    }
     if (!s.digits || Number(s.digits) <= 0) {
       toast('請先輸入金額');
       shake(amountEl);
@@ -233,11 +341,16 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
     if (isT()) Object.assign(entry, { fromId: s.accountId, toId: s.toId });
     else Object.assign(entry, { catId: s.catId, accountId: s.accountId });
     Object.assign(entry, {
-      amount: Number(s.digits),
-      date: s.dateKey > todayKey() ? todayKey() : s.dateKey,
+      amount: total(),
+      date: s.dateKey > maxKey() ? maxKey() : s.dateKey,
       note: s.note.trim().slice(0, NOTE_MAX),
       createdAt: old ? old.createdAt : Date.now(),
     });
+    const adj = adjList();
+    if (adj.length) {
+      entry.adjust = adj;
+      if (!isT()) entry.base = Number(s.digits);
+    }
     if (old) entry.updatedAt = Date.now();
     // 記住這次用的帳戶，下次預設就是它
     if (isT()) { setPref('lastAcc.from', s.accountId); setPref('lastAcc.to', s.toId); }
@@ -270,14 +383,14 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
     renderDate();
   });
   nextBtn.addEventListener('click', () => {
-    if (s.dateKey >= todayKey()) return;
+    if (s.dateKey >= maxKey()) return;
     s.dateKey = toKey(addPeriods(fromKey(s.dateKey), 'day', 1));
     renderDate();
   });
   dateInput.addEventListener('change', () => {
     const d = fromKey(dateInput.value);
     if (!d) { renderDate(); return; } // 清空或不合法就維持原本的日期
-    s.dateKey = dateInput.value > todayKey() ? todayKey() : dateInput.value;
+    s.dateKey = dateInput.value > maxKey() ? maxKey() : dateInput.value;
     renderDate();
   });
   noteInput.addEventListener('input', () => { s.note = noteInput.value; });
@@ -321,8 +434,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
   vv?.addEventListener('scroll', syncKeyboard);
 
   return {
-    isOpen: () => sheet.isOpen() || editor.isOpen() || accEditor.isOpen(),
-    close: () => { editor.close(); accEditor.close(); sheet.close(); },
+    isOpen: () => sheet.isOpen() || editor.isOpen() || accEditor.isOpen() || adjSheet.isOpen(),
+    close: () => { editor.close(); accEditor.close(); adjSheet.close(); sheet.close(); },
     /**
      * 新增：open({type})；編輯：open({entry})，欄位會預先填好。
      * @param {{type?:'expense'|'income'|'transfer', entry?:object}} [opts]
@@ -331,7 +444,8 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
       s.editing = entry;
       if (entry) {
         s.type = entry.type;
-        s.digits = String(entry.amount);
+        s.digits = String(entry.adjust && entry.adjust.length && entry.type !== 'transfer' ? entry.base : entry.amount);
+        s.adjust = (entry.adjust || []).map((a) => ({ k: a.k, digits: String(a.v) }));
         s.catId = entry.catId || null;
         s.accountId = entry.type === 'transfer' ? entry.fromId : entry.accountId || null;
         s.toId = entry.toId || null;
@@ -340,12 +454,14 @@ export function createEntrySheet({ onSave, onDelete, toast, newId, accEditor }) 
       } else {
         s.type = type;
         s.digits = '';
+        s.adjust = [];
         s.catId = null; // 重畫輪播時會停在第一個類別
         s.accountId = null; // 重畫時用上次用的帳戶
         s.toId = null;
         s.note = '';
         s.dateKey = todayKey();
       }
+      s.active = 'base';
       noteInput.value = s.note;
       noteInput.classList.remove('nudge');
       renderMode();

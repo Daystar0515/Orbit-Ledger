@@ -1,3 +1,5 @@
+import { transferFee } from './adjust.js';
+
 // 帳戶（資產）：分成三大類——現金、信用卡、存款，每一類底下可以有多個自訂的子帳戶。
 // 帳戶清單存在資料庫的 meta 裡（key: 'accounts'）。
 //
@@ -22,7 +24,7 @@ export const MONEY_MAX = 99999999;
 export function defaultAccounts() {
   return [
     { id: 'a-cash', kind: 'cash', name: '錢包', opening: 0 },
-    { id: 'a-credit', kind: 'credit', name: '信用卡', opening: 0, limit: 0 },
+    { id: 'a-credit', kind: 'credit', name: '信用卡', opening: 0, limit: 0, statementDay: null, dueDay: null, remind: { on: false, offsets: [1], events: ['due'] } },
     { id: 'a-bank', kind: 'bank', name: '銀行存款', opening: 0 },
   ];
 }
@@ -36,6 +38,30 @@ export function parseMoney(text) {
   return n <= MONEY_MAX ? n : null;
 }
 
+/** 每月的第幾天（1～31）；沒設定是 null。 */
+const cleanDay = (d) => (Number.isInteger(d) && d >= 1 && d <= 31 ? d : null);
+export const REMIND_OFFSETS = [0, 1, 7]; // 當天、前一天、前一週
+/** 各類帳戶可以提醒的日子：信用卡是結帳日、繳款日；存款（有設定利率時）是計息日、發息日。 */
+export const REMIND_EVENTS = { credit: ['statement', 'due'], bank: ['accrual', 'payout'] };
+const DEFAULT_EVENT = { credit: 'due', bank: 'payout' };
+export const PAY_FREQS = ['monthly', 'quarterly', 'semiannual', 'annual']; // 發息頻率
+/** 提醒設定：{ on, offsets: 提前幾天, events: 哪些日子 } */
+export function cleanRemind(r, kind = 'credit') {
+  const o = r && typeof r === 'object' ? r : {};
+  const offsets = REMIND_OFFSETS.filter((x) => Array.isArray(o.offsets) && o.offsets.includes(x));
+  const allowed = REMIND_EVENTS[kind] || [];
+  const events = allowed.filter((x) => Array.isArray(o.events) && o.events.includes(x));
+  return { on: o.on === true, offsets: offsets.length ? offsets : [1], events: events.length ? events : [DEFAULT_EVENT[kind]] };
+}
+/** 年利率（%），最多三位小數，0 < 利率 ≤ 100；不合法回傳 null。 */
+export function parseRate(text) {
+  const t = String(text ?? '').trim().replace(/%$/, '');
+  if (!/^\d{1,3}(\.\d{1,3})?$/.test(t)) return null;
+  const n = Number(t);
+  return n > 0 && n <= 100 ? n : null;
+}
+const cleanRate = (r) => (typeof r === 'number' && r > 0 && r <= 100 ? Math.round(r * 1000) / 1000 : null);
+
 const clampMoney = (n) => (Number.isInteger(n) ? Math.max(0, Math.min(MONEY_MAX, n)) : 0);
 
 export function cleanAccounts(list) {
@@ -46,7 +72,21 @@ export function cleanAccounts(list) {
     .slice(0, ACC_MAX)
     .map((a) => {
       const out = { id: a.id, kind: a.kind, name: a.name.trim().slice(0, ACC_NAME_MAX), opening: clampMoney(a.opening) };
-      if (a.kind === 'credit') out.limit = clampMoney(a.limit);
+      if (a.kind === 'credit') {
+        out.limit = clampMoney(a.limit);
+        out.statementDay = cleanDay(a.statementDay);
+        out.dueDay = cleanDay(a.dueDay);
+        out.remind = cleanRemind(a.remind, 'credit');
+      }
+      if (a.kind === 'bank' && a.interestOn) {
+        // 存款利率（選填）：年利率、計息日、發息日與發息頻率、提醒
+        out.interestOn = true;
+        out.rate = cleanRate(a.rate);
+        out.accrualDay = cleanDay(a.accrualDay);
+        out.payDay = cleanDay(a.payDay);
+        out.payFreq = PAY_FREQS.includes(a.payFreq) ? a.payFreq : 'semiannual';
+        out.remind = cleanRemind(a.remind, 'bank');
+      }
       return out;
     });
 }
@@ -131,9 +171,10 @@ export function mergeAccounts(incoming) {
 
 /**
  * 每個帳戶目前的金額。現金／存款是餘額；信用卡是欠款（已刷未繳）。
+ * asOf（'YYYY-MM-DD'）：只算到這一天為止；之後的帳目是預先記的，不計入。
  * @returns {Map<string, number>}
  */
-export function balances(accountList, entries) {
+export function balances(accountList, entries, asOf = null) {
   const kind = new Map(accountList.map((a) => [a.id, a.kind]));
   const bal = new Map(accountList.map((a) => [a.id, a.opening || 0]));
   // sign：對「現金／存款餘額」的影響；信用卡欠款的方向剛好相反
@@ -143,10 +184,11 @@ export function balances(accountList, entries) {
   };
   for (const e of entries) {
     if (e.demo) continue;
+    if (asOf && e.date > asOf) continue; // 還沒到的（預先記的未來收支）不計入目前的金額
     if (e.type === 'expense') add(e.accountId, -1, e.amount);
     else if (e.type === 'income') add(e.accountId, +1, e.amount);
     else if (e.type === 'transfer') {
-      add(e.fromId, -1, e.amount);
+      add(e.fromId, -1, e.amount + transferFee(e)); // 手續費從轉出帳戶多扣
       add(e.toId, +1, e.amount);
     }
   }

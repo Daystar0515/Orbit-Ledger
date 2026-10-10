@@ -4,6 +4,8 @@
 
 import { makeSheet } from './sheet.js';
 import { KINDS, KIND_ORDER, getAccounts, balances, kindTotals } from './accounts.js';
+import { toKey } from './dateutil.js';
+import { nextOccurrence, eventSpec, whenText, yearlyInterest } from './reminders.js';
 
 const $ = (id) => document.getElementById(id);
 const nf = new Intl.NumberFormat('zh-TW');
@@ -14,6 +16,9 @@ export function createAssetSheet({ getEntries, editor }) {
   const el = $('asset-sheet');
   const groups = $('asset-groups');
   const net = $('net-amt');
+  const futureNote = document.createElement('div');
+  futureNote.className = 'a-note';
+  net.after(futureNote);
 
   const sheet = makeSheet(el, { onOpen: () => draw() });
 
@@ -22,10 +27,15 @@ export function createAssetSheet({ getEntries, editor }) {
 
   function draw() {
     const list = getAccounts();
-    const bal = balances(list, getEntries());
+    const today = new Date();
+    const todayKey = toKey(today);
+    const bal = balances(list, getEntries(), todayKey); // 未來的收支還沒發生，不計入
     const t = kindTotals(list, bal);
     net.textContent = money(t.net);
     net.className = `net-amt ${t.net < 0 ? 'neg' : ''}`;
+    const later = getEntries().filter((e) => e.date > todayKey && (e.accountId || e.fromId)).length;
+    futureNote.hidden = later === 0;
+    futureNote.textContent = `另有 ${later} 筆預先記的未來收支，到那天才會計入。`;
     groups.replaceChildren();
 
     for (const kind of KIND_ORDER) {
@@ -63,14 +73,31 @@ export function createAssetSheet({ getEntries, editor }) {
         nm.className = 'a-acc';
         nm.textContent = a.name;
         left.appendChild(nm);
-        if (kind === 'credit') {
+        const addSub = (text, cls = '') => {
           const sub = document.createElement('span');
-          sub.className = 'a-sub';
-          sub.textContent = a.limit
-            ? `額度上限 NT$ ${nf.format(a.limit)}・可用 NT$ ${nf.format(Math.max(0, a.limit - v))}`
-            : '尚未設定額度上限';
+          sub.className = `a-sub ${cls}`.trim();
+          sub.textContent = text;
           left.appendChild(sub);
+        };
+        /** 「結帳 11/5（26 天後）・繳款 10/20（10 天後）」 */
+        const daysLine = (pairs) => {
+          const parts = pairs
+            .map(([ev, label]) => { const sp = eventSpec(a, ev); return sp ? `${label} ${whenText(nextOccurrence(sp, today), today)}` : null; })
+            .filter(Boolean);
+          if (parts.length) addSub(parts.join('・'), 'a-days');
+        };
+        if (kind === 'credit') {
+          addSub(a.limit
+            ? `額度上限 NT$ ${nf.format(a.limit)}・可用 NT$ ${nf.format(Math.max(0, a.limit - v))}`
+            : '尚未設定額度上限');
+          daysLine([['statement', '結帳'], ['due', '繳款']]);
         }
+        if (kind === 'bank' && a.interestOn && a.rate) {
+          const y = yearlyInterest(v, a.rate);
+          addSub(`年利率 ${a.rate}%${y ? `・預估年息約 NT$ ${nf.format(y)}` : ''}`, 'a-rate');
+          daysLine([['accrual', '計息'], ['payout', '發息']]);
+        }
+        if ((kind === 'credit' || (kind === 'bank' && a.interestOn)) && a.remind && a.remind.on) addSub('已開啟提醒', 'a-remind');
         const amt = document.createElement('span');
         amt.className = `a-amt ${tone(kind, v)}`;
         amt.textContent = money(v);

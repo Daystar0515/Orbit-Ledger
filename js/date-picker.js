@@ -1,5 +1,6 @@
 // 點頂部日期開啟的選擇器：上方切換日／週／月／年，下方依層級顯示月曆、月份或年份。
-// 切換層級會立刻套用（日期不變）；點選某一天／月／年會跳到那裡並關閉視窗。不能選未來。
+// 切換層級會立刻套用（日期不變）；點選某一天／月／年會跳到那裡並關閉視窗。
+// 可以選到兩年後（用來查看或預先記未來的收支）。
 
 import { makeSheet } from './sheet.js';
 import { startOfDay, startOfPeriod, toKey } from './dateutil.js';
@@ -53,6 +54,7 @@ export function createDatePicker({ getLevel, getAnchor, getEntryKeys, onLevel, o
     });
     const now = new Date();
     const today = startOfDay(now);
+    const maxDate = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()); // 最遠到兩年後
     const anchor = startOfDay(getAnchor());
     const keys = getEntryKeys();
     grid.replaceChildren();
@@ -74,14 +76,14 @@ export function createDatePicker({ getLevel, getAnchor, getEntryKeys, onLevel, o
         const on = level === 'day' ? key === toKey(anchor) : toKey(startOfPeriod(date, 'week')) === selWeek && getLevel() === 'week';
         grid.appendChild(cell(String(d), {
           on,
-          disabled: date > today,
+          disabled: date > maxDate,
           today: key === toKey(today),
           dot: keys.has(key),
           data: { date: key },
         }));
       }
       prev.disabled = false;
-      next.disabled = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
+      next.disabled = y > maxDate.getFullYear() || (y === maxDate.getFullYear() && m >= maxDate.getMonth());
     } else if (level === 'month') {
       const y = cursor.getFullYear();
       title.textContent = `${y}年`;
@@ -90,23 +92,23 @@ export function createDatePicker({ getLevel, getAnchor, getEntryKeys, onLevel, o
         const date = new Date(y, m, 1);
         grid.appendChild(cell(`${m + 1}月`, {
           on: getLevel() === 'month' && anchor.getFullYear() === y && anchor.getMonth() === m,
-          disabled: date > today,
+          disabled: date > maxDate,
           today: y === now.getFullYear() && m === now.getMonth(),
           dot: months.has(pad(m + 1)),
           data: { date: toKey(date) },
         }));
       }
       prev.disabled = false;
-      next.disabled = y >= now.getFullYear();
+      next.disabled = y >= maxDate.getFullYear();
     } else {
       const years = new Set([...keys].map((k) => Number(k.slice(0, 4))));
-      const lastYear = now.getFullYear();
+      const lastYear = maxDate.getFullYear();
       const firstYear = Math.min(lastYear - 5, ...years);
       title.textContent = `${firstYear}–${lastYear}`;
       for (let y = firstYear; y <= lastYear; y += 1) {
         grid.appendChild(cell(`${y}年`, {
           on: getLevel() === 'year' && anchor.getFullYear() === y,
-          today: y === lastYear,
+          today: y === now.getFullYear(),
           dot: years.has(y),
           data: { date: `${y}-01-01` },
         }));
